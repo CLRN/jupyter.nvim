@@ -4,7 +4,7 @@ project(neovim_client_cpp)
 
 find_package(Boost 1.55.0 REQUIRED COMPONENTS system coroutine context thread)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
+set (CMAKE_CXX_STANDARD 23)
 set(MSGPACK_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/msgpack-c)
 
 #add_subdirectory(${MSGPACK_SOURCE_DIR})
@@ -27,7 +27,7 @@ target_link_libraries(test ${Boost_LIBRARIES})
 find_package(PythonInterp)
 if (PYTHONINTERP_FOUND)
     add_custom_target(auto_gen_api
-        COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/gen_api.py
+        COMMAND python3 ${CMAKE_SOURCE_DIR}/gen_api.py
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Autogen nvim interface"
     )

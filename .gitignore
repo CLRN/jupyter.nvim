@@ -32,3 +32,6 @@
 
 gen/
 build/
+cmake-build
+.cache
+venv

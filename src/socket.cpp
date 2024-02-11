@@ -1,10 +1,12 @@
 #include "socket.hpp"
 
+#include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/lambda.hpp>
 #include <boost/asio/write.hpp>
 #include <boost/asio/read.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <cstdint>
 
 #define BOOST_VARIANT_USE_RELAXED_GET_BY_DEFAULT
 
@@ -13,12 +15,11 @@ using boost::asio::ip::tcp;
 using boost::lambda::bind;
 using boost::lambda::var;
 using boost::lambda::_1;
-using boost::lambda::_2;
 
 namespace nvim {
 
 void Socket::connect_tcp(const std::string& host, 
-                     const std::string& service, double timeout_sec)
+                     const std::string& service, uint32_t timeout_sec)
 {
     tcp::resolver::query query(host, service);
     tcp::resolver::iterator iter = tcp::resolver(io_service_).resolve(query);
@@ -40,7 +41,7 @@ void Socket::connect_tcp(const std::string& host,
         ec ? ec : boost::asio::error::host_not_found);
 }
 
-size_t Socket::read(char *rbuf, size_t capacity, double timeout_sec) {
+size_t Socket::read(char *rbuf, size_t capacity, uint32_t timeout_sec) {
     deadline_.expires_from_now(boost::posix_time::seconds(timeout_sec));
     boost::system::error_code ec = boost::asio::error::would_block;
     size_t rlen;
@@ -54,7 +55,7 @@ size_t Socket::read(char *rbuf, size_t capacity, double timeout_sec) {
     return rlen;
 }
 
-void Socket::write(char *sbuf, size_t size, double timeout_sec) {
+void Socket::write(char *sbuf, size_t size, uint32_t timeout_sec) {
     deadline_.expires_from_now(boost::posix_time::seconds(timeout_sec));
     boost::system::error_code ec = boost::asio::error::would_block;
     boost::asio::async_write(socket_, boost::asio::buffer(sbuf, size), var(ec) = _1);

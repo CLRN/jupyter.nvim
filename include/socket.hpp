@@ -1,5 +1,6 @@
 #ifndef NEOVIM_CPP__SOCKET_HPP_
 #define NEOVIM_CPP__SOCKET_HPP_
+#include <cstdint>
 #define BOOST_VARIANT_USE_RELAXED_GET_BY_DEFAULT
 
 #include <boost/asio/deadline_timer.hpp>
@@ -26,10 +27,10 @@ public:
     }
 
     void connect_tcp(const std::string& host, 
-               const std::string& service, double timeout_sec);
+               const std::string& service, uint32_t timeout_sec);
 
-    size_t read(char *rbuf, size_t capacity, double timeout_sec);
-    void write(char *sbuf, size_t size, double timeout_sec);
+    size_t read(char *rbuf, size_t capacity, uint32_t timeout_sec);
+    void write(char *sbuf, size_t size, uint32_t timeout_sec);
 
 private:
     void check_deadline();
