@@ -2,12 +2,15 @@
 #define NEOVIM_CPP__NVIM_RPC_HPP__
 #define BOOST_VARIANT_USE_RELAXED_GET_BY_DEFAULT
 
+module;
+
 #include "msgpack.hpp"
 #include <string>
 #include <iostream>
 #include <sstream>
 
-#include "socket.hpp"
+// #include "socket.hpp"
+import socket;
 
 namespace nvim {
 
@@ -45,7 +48,7 @@ public:
     void call(const std::string &method, Object& res, const U&...u);
     
     template<typename...U>
-    void call(const std::string &method, nullptr_t res, const U&...u);
+    void call(const std::string &method, std::nullptr_t res, const U&...u);
     
 private:
     template<typename...U>

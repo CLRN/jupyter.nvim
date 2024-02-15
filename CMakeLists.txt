@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.28)
 
 project(neovim_client_cpp)
 
@@ -17,15 +17,21 @@ include_directories(
     ${MSGPACK_SOURCE_DIR}/include
 )
 
-add_executable(test 
+add_executable(test)
+
+target_sources(test
+  PRIVATE
     src/main.cpp
+  PUBLIC
+  FILE_SET CXX_MODULES FILES
     src/socket.cpp
 )
 
+# Link to the library foo
 target_link_libraries(test ${Boost_LIBRARIES})
 
-find_package(PythonInterp)
-if (PYTHONINTERP_FOUND)
+find_package(Python3)
+if (Python3_Interpreter_FOUND)
     add_custom_target(auto_gen_api
         COMMAND python3 ${CMAKE_SOURCE_DIR}/gen_api.py
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
