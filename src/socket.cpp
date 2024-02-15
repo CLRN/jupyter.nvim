@@ -18,7 +18,6 @@ module;
 #include <boost/lambda/lambda.hpp>
 // #include <cstdint>
 
-
 using boost::asio::ip::tcp;
 using boost::lambda::_1;
 using boost::lambda::bind;
@@ -112,4 +111,3 @@ export class Socket {
 };
 
 } // namespace nvim
-
