@@ -1,3 +1,6 @@
 [submodule "external/msgpack-c"]
 	path = external/msgpack-c
 	url = https://github.com/msgpack/msgpack-c
+[submodule "third_party/boost/asio"]
+	path = third_party/boost/asio
+	url = https://github.com/DanielaE/asio.git

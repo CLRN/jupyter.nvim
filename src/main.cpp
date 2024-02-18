@@ -1,13 +1,15 @@
 // #include "nvim.hpp"
 #include <string>
 import socket;
+import coro;
 
 int main() {
-    std::string test = "aaa";
-    test.clear();
+    coro::testCoro();
+    return 0;
+
     nvim::Socket s{};
 
-    s.connect_tcp("localhost", "666", 999);
+    s.connect_tcp("localhost", "6666", 999);
     char buf[] = "test";
     s.write(buf, sizeof(buf) - 1, 999);
     s.read(buf, 4, 999);

@@ -36,7 +36,6 @@ export class Socket {
     }
 
     void connect_tcp(const std::string &host, const std::string &service, uint32_t timeout_sec) {
-
         tcp::resolver::query query(host, service);
         tcp::resolver::iterator iter = tcp::resolver(io_service_).resolve(query);
 
