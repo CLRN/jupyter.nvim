@@ -3,14 +3,7 @@ cmake_minimum_required(VERSION 3.28)
 project(neovim_client_cpp)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-# find_package(Boost 1.55.0 REQUIRED COMPONENTS system coroutine context thread)
-
-set (CMAKE_CXX_STANDARD 23)
-set(MSGPACK_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/msgpack-c)
-
-#add_subdirectory(${MSGPACK_SOURCE_DIR})
-set(CMAKE_CXX_FLAGS "-DMSGPACK_USE_BOOST ${CMAKE_CXX_FLAGS}") #TODO: import every flags directly from msgpack-c
+set(CMAKE_CXX_STANDARD 23)
 
 include_directories(
     include
@@ -20,6 +13,7 @@ include_directories(
 )
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost/asio)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
 
 add_executable(test)
 
@@ -29,15 +23,14 @@ target_sources(test
   PUBLIC
   FILE_SET CXX_MODULES FILES
     src/std.cpp
+    src/msgpack.cpp
     src/tracker.cpp
     src/coro.cpp
     src/socket.cpp
     src/asocket.cpp
 )
 
-# Link to the library foo
-# target_link_libraries(test ${Boost_LIBRARIES})
-target_link_libraries(test asio)
+target_link_libraries(test asio msgpack-cxx)
 
 # find_package(Python3)
 # if (Python3_Interpreter_FOUND)
