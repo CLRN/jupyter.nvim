@@ -47,7 +47,7 @@ public:
         co_await socket_->async_send(asio::buffer(buffer.data(), buffer.size()), asio::use_awaitable);
     }
 
-    auto receive(asio::any_io_executor) -> asio::experimental::coro<msgpack::object> {
+    auto receive(asio::io_context&) -> asio::experimental::coro<msgpack::object> {
         msgpack::unpacker pac;
         pac.reserve_buffer(1024);
 
@@ -71,7 +71,7 @@ export auto run(std::string host, uint16_t port) {
     auto runner = [&] -> asio::awaitable<void> {
         co_await socket.connect();
 
-        auto server = [&] -> asio::awaitable<void> {
+        auto server = [&]() -> asio::awaitable<void> {
             while (true) {
                 co_await socket.send("whatever", 1, 2, "test");
                 auto timer = asio::steady_timer{co_await asio::this_coro::executor, std::chrono::seconds(5)};
@@ -79,70 +79,18 @@ export auto run(std::string host, uint16_t port) {
             }
         };
 
-        auto client = [&] -> asio::awaitable<void> {
-            auto reader = socket.receive(co_await asio::this_coro::executor);
-            auto msg = co_await reader.async_resume(asio::use_awaitable);
+        auto client = [&](asio::io_context& ctx) -> asio::experimental::coro<void> {
+            auto reader = socket.receive(ctx);
+            while (auto l = co_await reader) {
+                std::cout << "Read: '" << *l << "'" << std::endl;
+            }
         };
 
+        co_spawn(client(ctx), asio::detached);
         co_await server();
-
-        asio::co_spawn(ctx, server, asio::detached);
-        asio::co_spawn(ctx, client, asio::detached);
     };
 
     asio::co_spawn(ctx, runner, asio::detached);
     ctx.run();
 }
 } // namespace rpc
-// auto serve_client(tcp::socket socket) -> asio::awaitable<void> {
-//     using namespace std::chrono;
-//
-//     std::cout << "New client connected\n";
-//
-//     auto ex = co_await asio::this_coro::executor;
-//     auto timer = asio::system_timer{ex};
-//     auto counter = 0;
-//     while (true) {
-//         try {
-//             auto s = std::to_string(counter);
-//             auto buf = asio::buffer(s.data(), s.size());
-//             auto n = co_await async_write(socket, buf, asio::use_awaitable);
-//             std::cout << "Wrote " << n << " byte(s)\n";
-//             ++counter;
-//             timer.expires_after(100ms);
-//             co_await timer.async_wait(asio::use_awaitable);
-//         } catch (...) { // Error or client disconnected
-//             break;
-//         }
-//     }
-// }
-//
-// auto listen(tcp::endpoint endpoint) -> asio::awaitable<void> {
-//     auto ex = co_await asio::this_coro::executor;
-//     auto a = tcp::acceptor{ex, endpoint};
-//     while (true) {
-//         auto socket = co_await a.async_accept(asio::use_awaitable);
-//         auto session = [s = std::move(socket)]() mutable {
-//             auto awaitable = serve_client(std::move(s));
-//             return awaitable;
-//         };
-//         asio::co_spawn(ex, std::move(session), asio::detached);
-//     }
-// }
-//
-// int tmain() {
-//     auto server = [] {
-//         auto endpoint = tcp::endpoint{tcp::v4(), 37259};
-//         auto awaitable = listen(endpoint);
-//         return awaitable;
-//     };
-//     auto ctx = asio::io_context{};
-//     asio::co_spawn(ctx, server, asio::detached);
-//     ctx.run(); // Run event loop from main thread
-//     return 0;
-// }
-//
-// auto connect(const std::string &host, std::uint8_t port)
-//     -> asio::awaitable<void> {
-//     return {};
-// }
