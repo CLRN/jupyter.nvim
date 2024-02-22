@@ -8,7 +8,7 @@ export namespace pack {
 enum { REQUEST = 0, RESPONSE = 1, NOTIFY = 2 };
 
 template <typename... U>
-auto pack_request(const std::string &method, const U &...u) {
+auto pack_request(const std::string& method, const U&... u) {
     msgpack::sbuffer buffer;
     msgpack::packer<msgpack::sbuffer> pk(&buffer);
     std::uint32_t msgid_ = 0;
@@ -19,7 +19,7 @@ auto pack_request(const std::string &method, const U &...u) {
     pk.pack(method);
 
     pk.pack_array(sizeof...(u));
-    int _[] = { (pk.pack(u), 0)... };
+    int _[] = {(pk.pack(u), 0)...};
 
     return buffer;
     //
@@ -55,6 +55,21 @@ auto pack_request(const std::string &method, const U &...u) {
     // msgpack::type::tuple<int64_t, int64_t, Object, Object> dst;
     // obj.convert(dst);
     // return dst.get<3>();
+}
+
+auto unpack() {
+    // deserializes these objects using msgpack::unpacker.
+    msgpack::unpacker pac;
+
+    // feeds the buffer.
+    pac.reserve_buffer(1024);
+    // memcpy(pac.buffer(), buffer.data(), buffer.size());
+    // pac.buffer_consumed(buffer.size());
+    // now starts streaming deserialization.
+    msgpack::object_handle oh;
+    while (pac.next(oh)) {
+        // std::cout << oh.get() << std::endl;
+    }
 }
 
 } // namespace pack

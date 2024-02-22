@@ -27,7 +27,7 @@ target_sources(test
     src/tracker.cpp
     src/coro.cpp
     src/socket.cpp
-    src/asocket.cpp
+    src/rpc.cpp
 )
 
 target_link_libraries(test asio msgpack-cxx)

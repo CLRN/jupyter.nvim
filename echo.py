@@ -3,8 +3,6 @@
 
 import socket
 import sys
-import string
-import random
 
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -23,9 +21,14 @@ while True:
 
         # Receive the data in small chunks and retransmit it
         while True:
-            data = random.choice(string.ascii_letters)
-            connection.sendall(bytes(data, 'utf-8'))
+            data = connection.recv(1024)
+            if not data:
+                break
+            print(f"{data=}")
+            connection.sendall(data)
 
+    except Exception as e:
+        print(e)
     finally:
         # Clean up the connection
         connection.close()

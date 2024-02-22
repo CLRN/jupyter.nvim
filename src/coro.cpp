@@ -25,17 +25,23 @@ concept CSocket = requires(T s) {
 };
 
 template <typename T>
-concept CTimer =
-    requires(T t) { t.async_wait([](boost::system::error_code) {}); };
+concept CTimer = requires(T t) { t.async_wait([](boost::system::error_code) {}); };
 
-template <typename T> class Task {
+template <typename T>
+class Task {
     struct Promise {
         Task<T> get_return_object() {
             return {std::coroutine_handle<Promise>::from_promise(*this)};
         }
-        std::suspend_never initial_suspend() noexcept { return {}; }
-        std::suspend_always final_suspend() noexcept { return {}; }
-        void return_value(T &&v) { val_ = std::move(v); }
+        std::suspend_never initial_suspend() noexcept {
+            return {};
+        }
+        std::suspend_always final_suspend() noexcept {
+            return {};
+        }
+        void return_value(T&& v) {
+            val_ = std::move(v);
+        }
 
         void unhandled_exception() {}
 
@@ -45,31 +51,42 @@ template <typename T> class Task {
     std::coroutine_handle<Promise> h_;
 
     template <CTimer Timer>
-    void run_async(Timer &timer, std::coroutine_handle<> h) {
-        timer.async_wait([h](boost::system::error_code ec) { h.resume(); });
+    void run_async(Timer& timer, std::coroutine_handle<> h) {
+        timer.async_wait([h](boost::system::error_code ec) {
+            h.resume();
+        });
     }
 
     template <CSocket Socket>
-    void run_async(Socket &socket, std::coroutine_handle<> h) {
-        socket.async_send([h](boost::system::error_code ec) { h.resume(); });
+    void run_async(Socket& socket, std::coroutine_handle<> h) {
+        socket.async_send([h](boost::system::error_code ec) {
+            h.resume();
+        });
     }
 
 public:
     using promise_type = Promise;
 
-    Task(std::coroutine_handle<Promise> h) : h_(h) {
+    Task(std::coroutine_handle<Promise> h)
+        : h_(h) {
         // std::cout << "ctor for " << h.address() << std::endl;
     }
-    ~Task() { h_.destroy(); }
+    ~Task() {
+        h_.destroy();
+    }
 
-    constexpr bool await_ready() const noexcept { return false; }
-    T await_resume() const noexcept { return std::move(*h_.promise().val_); }
+    constexpr bool await_ready() const noexcept {
+        return false;
+    }
+    T await_resume() const noexcept {
+        return std::move(*h_.promise().val_);
+    }
 
     void await_suspend(std::coroutine_handle<> h) noexcept {
         run_async(*h_.promise().val_, h);
     }
 
-    T run(boost::asio::io_context &ctx) const {
+    T run(boost::asio::io_context& ctx) const {
         while (!h_.done()) {
             ctx.poll_one();
         }
@@ -83,7 +100,7 @@ public:
 //     co_return " nested2";
 // }
 
-Task<boost::asio::deadline_timer> nested(boost::asio::io_context &ctx) {
+Task<boost::asio::deadline_timer> nested(boost::asio::io_context& ctx) {
     // std::cout << "nested" << std::endl;
     boost::asio::deadline_timer t{ctx, boost::posix_time::seconds{5}};
     co_return t;
@@ -95,7 +112,7 @@ Task<boost::asio::deadline_timer> nested(boost::asio::io_context &ctx) {
     // co_return t + " and nested " + l;
 }
 
-Task<boost::asio::deadline_timer> f(boost::asio::io_context &ctx) {
+Task<boost::asio::deadline_timer> f(boost::asio::io_context& ctx) {
     // std::cout << "coro" << std::endl;
     // coroutine h = nested();
     // h.resume();

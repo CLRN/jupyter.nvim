@@ -1,18 +1,17 @@
-// #include "nvim.hpp"
-#include <string>
-import socket;
-import coro;
+import rpc;
 
 int main() {
-    coro::testCoro();
-    return 0;
-
-    nvim::Socket s{};
-
-    s.connect_tcp("localhost", "6666", 999);
-    char buf[] = "test";
-    s.write(buf, sizeof(buf) - 1, 999);
-    s.read(buf, 4, 999);
+    rpc::run("localhost", 6666);
+    
+    // coro::testCoro();
+    // return 0;
+    //
+    // nvim::Socket s{};
+    //
+    // s.connect_tcp("localhost", "6666", 999);
+    // char buf[] = "test";
+    // s.write(buf, sizeof(buf) - 1, 999);
+    // s.read(buf, 4, 999);
 
     // nvim::Nvim nvim;
     // nvim.connect_tcp("localhost", "6666");
