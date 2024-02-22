@@ -16,6 +16,7 @@ export class Socket {
     const std::string host_;
     const std::uint16_t port_;
     std::optional<tcp::socket> socket_;
+    std::uint32_t msgid_ = 0;
 
 public:
     Socket(std::string host, std::uint16_t port)
@@ -36,7 +37,6 @@ public:
     auto send(const std::string& method, const U&... u) -> asio::awaitable<void> {
         msgpack::sbuffer buffer;
         msgpack::packer<msgpack::sbuffer> pk(&buffer);
-        std::uint32_t msgid_ = 0;
         pk.pack_array(4);
         pk.pack(static_cast<std::uint32_t>(REQUEST));
         pk.pack(msgid_++);
@@ -64,6 +64,10 @@ public:
     }
 };
 
+// Read: '[1,3,[0,"Wrong number of arguments: expecting 1 but got 0"],null]'
+// Read: '[1,6,null,"#"]'
+// Read: '[1,7,null,null]' - set line success
+//
 export auto run(std::string host, uint16_t port) {
     auto ctx = asio::io_context{};
     auto socket = Socket{std::move(host), port};
@@ -73,7 +77,10 @@ export auto run(std::string host, uint16_t port) {
 
         auto server = [&]() -> asio::awaitable<void> {
             while (true) {
-                co_await socket.send("whatever", 1, 2, "test");
+                // co_await socket.send("nvim_get_current_line");
+                // co_await socket.send("nvim_set_current_line", "test");
+                // co_await socket.send("nvim_win_get_cursor", 0);
+                co_await socket.send("nvim_win_get_cursor", 0);
                 auto timer = asio::steady_timer{co_await asio::this_coro::executor, std::chrono::seconds(5)};
                 co_await timer.async_wait(asio::use_awaitable);
             }

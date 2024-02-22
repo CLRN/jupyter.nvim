@@ -32,13 +32,13 @@ target_sources(test
 
 target_link_libraries(test asio msgpack-cxx)
 
-# find_package(Python3)
-# if (Python3_Interpreter_FOUND)
-#     add_custom_target(auto_gen_api
-#         COMMAND python3 ${CMAKE_SOURCE_DIR}/gen_api.py
-#         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-#         COMMENT "Autogen nvim interface"
-#     )
-# endif()
+find_package(Python3)
+if (Python3_Interpreter_FOUND)
+    add_custom_target(auto_gen_api
+        COMMAND python3 ${CMAKE_SOURCE_DIR}/gen_api.py
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Autogen nvim interface"
+    )
+endif()
 
-# add_dependencies(test auto_gen_api)
+add_dependencies(test auto_gen_api)
