@@ -11,7 +11,6 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-#include <cstddef>
 #include <iostream>
 #include <msgpack.hpp>
 
@@ -95,30 +94,30 @@ inline auto run(std::string host, uint16_t port) {
                     boost::asio::steady_timer{co_await boost::asio::this_coro::executor, std::chrono::seconds(5)};
                 co_await timer.async_wait(boost::asio::use_awaitable);
             }
+            std::cout << "returned from server" << std::endl;
         };
 
-        auto client = [&](boost::asio::io_context& ctx) -> boost::asio::experimental::coro<void, std::size_t> {
+        auto client = [&](boost::asio::io_context& ctx) -> boost::asio::experimental::coro<void> {
             auto reader = socket.receive(ctx);
             while (auto l = co_await reader) {
                 std::cout << "Read: '" << *l << "'" << std::endl;
             }
-
-            co_return 0;
         };
 
-        // co_await t.async_resume(boost::asio::use_awaitable);
-        
-
-        // boost::asio::co_spawn(t, [](std::exception_ptr, std::size_t lines) {
-        //     std::clog << "Read " << lines << " lines" << std::endl;
-        // });
-        // co_await t(ctx);
-        // boost::asio::co_spawn(t, [](auto, auto){});
         auto coro = client(ctx);
-        co_await (server() && coro.async_resume(boost::asio::use_awaitable));
+        boost::asio::co_spawn(ctx, server, boost::asio::detached);
+        co_await coro.async_resume(boost::asio::use_awaitable);
+        // co_await (server() && coro.async_resume(boost::asio::use_awaitable));
     };
 
     boost::asio::co_spawn(ctx, runner, boost::asio::detached);
-    ctx.run();
+
+    try {
+        const int cnt = ctx.run();
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "unknown error" << std::endl;
+    }
 }
 } // namespace rpc

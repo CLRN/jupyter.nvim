@@ -12,7 +12,6 @@ include_directories(
     ${MSGPACK_SOURCE_DIR}/include
 )
 
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost/asio)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
 
 add_executable(test)
@@ -25,6 +24,21 @@ target_sources(test
 )
 
 target_link_libraries(test msgpack-cxx)
+set(HEADER_FILES 
+  <boost/asio/awaitable.hpp>
+  <boost/asio/co_spawn.hpp>
+  <boost/asio/connect.hpp>
+  <boost/asio/detached.hpp>
+  <boost/asio/experimental/awaitable_operators.hpp>
+  <boost/asio/experimental/coro.hpp>
+  <boost/asio/experimental/use_coro.hpp>
+  <boost/asio/ip/tcp.hpp>
+  <boost/asio/this_coro.hpp>
+  <boost/asio/use_awaitable.hpp>
+  <iostream>
+  <msgpack.hpp>
+)
+target_precompile_headers(test PRIVATE ${HEADER_FILES})
 
 find_package(Python3)
 if (Python3_Interpreter_FOUND)
