@@ -8,7 +8,6 @@ set(CMAKE_CXX_STANDARD 23)
 include_directories(
     include
     gen
-    ${Boost_INCLUDE_DIR}
     ${MSGPACK_SOURCE_DIR}/include
 )
 
@@ -23,10 +22,6 @@ target_sources(test
   PUBLIC
   FILE_SET CXX_MODULES FILES
     src/std.cpp
-    src/msgpack.cpp
-    src/tracker.cpp
-    src/coro.cpp
-    src/socket.cpp
     src/rpc.cpp
 )
 
