@@ -7,11 +7,12 @@ set(CMAKE_CXX_STANDARD 23)
 
 include_directories(
     include
+    src
     gen
     ${MSGPACK_SOURCE_DIR}/include
 )
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost/asio)
+# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost/asio)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
 
 add_executable(test)
@@ -21,11 +22,9 @@ target_sources(test
     src/main.cpp
   PUBLIC
   FILE_SET CXX_MODULES FILES
-    src/std.cpp
-    src/rpc.cpp
 )
 
-target_link_libraries(test asio msgpack-cxx)
+target_link_libraries(test msgpack-cxx)
 
 find_package(Python3)
 if (Python3_Interpreter_FOUND)

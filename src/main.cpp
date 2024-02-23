@@ -1,8 +1,8 @@
-import rpc;
+#include "rpc.hpp"
 
 int main() {
     rpc::run("localhost", 6666);
-    
+
     // coro::testCoro();
     // return 0;
     //
