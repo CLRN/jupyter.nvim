@@ -2,15 +2,12 @@
 #define NEOVIM_CPP__NVIM_RPC_HPP__
 #define BOOST_VARIANT_USE_RELAXED_GET_BY_DEFAULT
 
-module;
-
 #include "msgpack.hpp"
 #include <string>
 #include <iostream>
 #include <sstream>
 
 // #include "socket.hpp"
-import socket;
 
 namespace nvim {
 

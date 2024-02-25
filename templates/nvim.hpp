@@ -1,37 +1,28 @@
 // Auto generated
 
-#ifndef NEOVIM_CPP__NVIM_HPP_
-#define NEOVIM_CPP__NVIm_HPP_
+#pragma once
 
-#include "nvim_rpc.hpp"
+#include "rpc.hpp"
 
 namespace nvim {
 
 class Nvim {
 public:
-    void connect_tcp(const std::string &host, 
-            const std::string &service, double timeout_sec = 1.0) {
-        
-        client_.connect_tcp(host, service, timeout_sec);
-    }
-
-{% for func in functions%}
-    {{func.return}} {{func.name}} ({% for arg in func.args %}{{arg.type}} {{arg.name}}{% if not loop.last %}, {% endif %}{% endfor %}) { 
+    Nvim(std::string host, std::uint16_t port) : client_{rpc::Socket{std::move(host), port}} {}
+{% for func in functions %}
+    auto {{func.name}} ({% for arg in func.args %}{{arg.type}} {{arg.name}}{% if not loop.last %}, {% endif %}{% endfor %}) -> boost::cobalt::promise<{{func.return}}> { 
         {% if func.return != "void" %}
-        {{func.return}} res;
-        client_.call("{{func.name}}", res{% for arg in func.args %}, {{arg.name}}{% endfor %}); 
-        return res;
+        co_return (co_await client_.call("{{func.name}}"{% for arg in func.args %}, {{arg.name}}{% endfor %})).{{func.convert}}();
         {% else %}
-        client_.call("{{func.name}}", nullptr{% for arg in func.args %}, {{arg.name}}{% endfor %}); 
+        co_await client_.call("{{func.name}}"{% for arg in func.args %}, {{arg.name}}{% endfor %}); 
         {% endif %}
     }
 {% endfor %}
 
 private:
-    NvimRPC client_;
+    rpc::Client client_;
 
 };
 
 } //namespace nvim
 
-#endif //NEOVIM_CPP__NVIM_HPP_

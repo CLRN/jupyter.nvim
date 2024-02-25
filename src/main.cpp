@@ -1,9 +1,11 @@
 #include "rpc.hpp"
+#include "nvim.hpp"
 
 #include <boost/cobalt/main.hpp>
 
 boost::cobalt::main co_main(int argc, char* argv[]) {
     co_await rpc::run("localhost", 6666);
+    nvim::Nvim n{"localhost", 6666};
 
     // coro::testCoro();
     // return 0;

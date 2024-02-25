@@ -20,15 +20,18 @@ class NativeType:
 
 
 REMAP_T = {
-    "ArrayOf(Integer, 2)": NativeType("std::vector<Integer>", True),
+    "ArrayOf(Integer, 2)": NativeType("std::vector<int>", True),
     "Boolean": NativeType("bool"),
     "String": NativeType("std::string", True),
     "void": NativeType("void"),
-    "Window": NativeType("Window"),
-    "Buffer": NativeType("Buffer"),
-    "Tabpage": NativeType("Tabpage"),
-    "Integer": NativeType("Integer"),
-    "Object": NativeType("Object", True),
+    "Float": NativeType("float"),
+    "Window": NativeType("int"),
+    "Buffer": NativeType("int"),
+    "Tabpage": NativeType("int"),
+    "Integer": NativeType("int"),
+    "Object": NativeType("msgpack::type::variant", True),
+    "Dictionary": NativeType("std::multimap<std::string, msgpack::type::variant>"),
+    "Array": NativeType("std::vector<msgpack::type::variant>"),
 }
 
 
@@ -44,7 +47,7 @@ def convert_type_to_native(nvim_t, enable_ref_op):
         native_t = REMAP_T[nvim_t]
         return "const " + native_t.name + "&" if enable_ref_op and native_t.expect_ref else native_t.name
     else:
-        # print("unknown nvim type name: " + str(nvim_t))
+        print("unknown nvim type name: " + str(nvim_t))
         raise InvalidType()
 
     # TODO: implement error handler
@@ -67,10 +70,12 @@ def main():
         try:
             d["return"] = convert_type_to_native(f["return_type"], False)
             d["args"] = [{"type": convert_type_to_native(arg[0], True), "name": arg[1]} for arg in f["parameters"]]
+            d["convert"] = "as_vector"
             functions.append(d)
         except InvalidType as e:
-            pass
-            # print("invalid function = " + str(f))
+            print("invalid function = " + str(f))
+
+        break
 
     api = tpl.render({"functions": functions})
     # print api.encode('utf-8')

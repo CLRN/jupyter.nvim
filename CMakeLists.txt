@@ -39,6 +39,7 @@ add_executable(test)
 target_sources(test
   PRIVATE
     src/main.cpp
+    gen/nvim.hpp
   PUBLIC
   FILE_SET CXX_MODULES FILES
 )
@@ -65,6 +66,7 @@ if (Python3_Interpreter_FOUND)
         COMMAND python3 ${CMAKE_SOURCE_DIR}/gen_api.py
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Autogen nvim interface"
+        DEPENDS ${CMAKE_SOURCE_DIR}/templates/nvim.hpp
     )
 endif()
 

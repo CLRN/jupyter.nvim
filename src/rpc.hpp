@@ -144,14 +144,14 @@ public:
 
         auto& channel = requests_[id].emplace(1);
 
-        co_await socket_.send(id, method, std::forward(u)...);
+        co_await socket_.send(id, method, u...);
 
         auto response = co_await channel.read();
         requests_.erase(id);
         if (const auto exc = std::get_if<std::exception_ptr>(&response)) {
             std::rethrow_exception(*exc);
         } else {
-            co_return std::get<msgpack::type::variant>(response);
+            co_return std::get<msgpack::type::variant>(std::move(response));
         }
     }
 
@@ -171,16 +171,8 @@ inline auto run(std::string host, uint16_t port) -> boost::cobalt::promise<void>
     auto socket = Socket{std::move(host), port};
     auto client = Client{std::move(socket)};
     const auto info = co_await client.call("nvim_get_all_options_info");
+    auto mm = info.as_multimap();
     std::cout << info.which() << std::endl;
-
-    {
-        const auto error = co_await client.call("nvim_set_current_line");
-        std::cout << error.which() << std::endl;
-    }
-    {
-        const auto error = co_await client.call("nvim_win_get_cursor");
-        std::cout << error.which() << std::endl;
-    }
 
     // boost::process::ipstream out;
     // std::future<std::string> data;
