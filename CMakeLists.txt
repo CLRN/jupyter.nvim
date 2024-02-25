@@ -4,7 +4,11 @@ project(neovim_client_cpp)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 23)
-add_compile_options(-Wno-deprecated-declarations)
+add_compile_options(
+  -Wno-deprecated-declarations
+  -DMSGPACK_USE_X3_PARSE
+  -DBOOST_COBALT_NO_PMR
+)
 
 include(FetchContent)
 

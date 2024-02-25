@@ -15,18 +15,18 @@
 
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <msgpack.hpp>
 #include <optional>
-#include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
-#include <vector>
+#include <variant>
 
 namespace rpc {
 
 using boost::asio::ip::tcp;
-using namespace boost::asio::experimental::awaitable_operators;
 
 enum { REQUEST = 0, RESPONSE = 1, NOTIFY = 2 };
 
@@ -84,21 +84,30 @@ public:
 };
 
 class Client {
+    using DataType = msgpack::type::variant;
+
     std::uint32_t msgid_ = 0;
     Socket socket_;
-    std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<msgpack::object>>> requests_;
+    std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<DataType>>> requests_;
     boost::cobalt::promise<void> receive_task_;
     volatile bool connected_{};
 
 private:
     auto receive() -> boost::cobalt::promise<void> {
-        std::cout << "receive start" << std::endl;
-        co_await connect();
+        using Response = std::tuple<std::uint32_t, std::uint32_t, msgpack::type::variant, msgpack::type::variant>;
+
+        co_await socket_.connect();
+        connected_ = true;
 
         auto reader = socket_.receive();
-        while (true) {
-            auto obj = co_await reader;
-            std::cout << obj << std::endl;
+        while (reader) {
+            const auto obj = co_await reader;
+            const auto& [type, id, error, result] = obj.as<Response>();
+            const auto it = requests_.find(id);
+            if (it != requests_.end()) {
+                std::cout << obj << std::endl;
+                co_await it->second->write(result);
+            }
         }
     }
 
@@ -107,24 +116,21 @@ public:
         : socket_(std::move(socket))
         , receive_task_{receive()} {}
 
-    auto connect() -> boost::cobalt::promise<void> {
-        co_await socket_.connect();
-        std::cout << "connected" << std::endl;
-        connected_ = true;
-    }
-
     template <typename... U>
-    auto send(const std::string& method, const U&... u) -> boost::cobalt::promise<msgpack::object> {
-        std::cout << "send start" << std::endl;
+    auto call(const std::string& method, const U&... u) -> boost::cobalt::promise<DataType> {
         while (!connected_) {
             boost::asio::steady_timer tim{co_await boost::asio::this_coro::executor, std::chrono::milliseconds(100)};
             co_await tim.async_wait(boost::cobalt::use_op);
         }
+        const auto id = msgid_++;
 
-        auto& channel = requests_[msgid_].emplace(1);
-        std::cout << "sending" << std::endl;
-        co_await socket_.send(msgid_++, method, std::forward(u)...);
-        co_return co_await channel.read();
+        auto& channel = requests_[id].emplace(1);
+
+        co_await socket_.send(id, method, std::forward(u)...);
+
+        auto response = co_await channel.read();
+        requests_.erase(id);
+        co_return response;
     }
 };
 
@@ -135,8 +141,8 @@ public:
 inline auto run(std::string host, uint16_t port) -> boost::cobalt::promise<void> {
     auto socket = Socket{std::move(host), port};
     auto client = Client{std::move(socket)};
-    // co_await client.connect();
-    co_await client.send("nvim_get_all_options_info");
+    const auto info = co_await client.call("nvim_get_all_options_info");
+    std::cout << info.which() << std::endl;
 
     // boost::process::ipstream out;
     // std::future<std::string> data;
