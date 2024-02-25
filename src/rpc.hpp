@@ -57,17 +57,25 @@ public:
         msgpack::unpacker pac;
         const auto increase = pac.buffer_capacity();
 
-        while (true) {
-            pac.reserve_buffer(increase);
-            const auto n = co_await socket_->async_read_some(boost::asio::buffer(pac.buffer(), pac.buffer_capacity()),
-                                                             boost::cobalt::use_op);
-            pac.buffer_consumed(n);
+        try {
+            while (true) {
+                pac.reserve_buffer(increase);
+                const auto n = co_await socket_->async_read_some(
+                    boost::asio::buffer(pac.buffer(), pac.buffer_capacity()), boost::cobalt::use_op);
+                pac.buffer_consumed(n);
 
-            msgpack::object_handle oh;
-            while (pac.next(oh)) {
-                co_yield oh.get();
+                msgpack::object_handle oh;
+                while (pac.next(oh)) {
+                    co_yield oh.get();
+                }
             }
+        } catch (const boost::system::system_error& e) {
+            if (e.code() == boost::system::errc::operation_canceled)
+                co_return {};
+
+            std::clog << "receive exception: " << e.what() << std::endl;
         }
+        co_return {};
     }
 };
 
@@ -90,6 +98,9 @@ private:
         auto reader = socket_.receive();
         while (reader) {
             const auto obj = co_await reader;
+            if (obj.is_nil())
+                break;
+
             const auto& [type, id, error, result] = obj.as<Response>();
             const auto it = requests_.find(id);
             if (it != requests_.end()) {
@@ -103,6 +114,11 @@ public:
     Client(Socket socket)
         : socket_(std::move(socket))
         , receive_task_{receive()} {}
+
+    ~Client() {
+        receive_task_.cancel();
+        receive_task_.attach();
+    }
 
     template <typename... U>
     auto call(const std::string& method, const U&... u) -> boost::cobalt::promise<DataType> {
