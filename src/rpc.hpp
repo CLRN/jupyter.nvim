@@ -6,11 +6,14 @@
 #include <msgpack.hpp>
 
 #include <cstdint>
+#include <exception>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 
 namespace rpc {
 
@@ -80,11 +83,12 @@ public:
 };
 
 class Client {
-    using DataType = msgpack::type::variant;
+    using DataType = std::variant<msgpack::type::variant, std::exception_ptr>;
 
     std::uint32_t msgid_ = 0;
     Socket socket_;
     std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<DataType>>> requests_;
+    boost::cobalt::channel<msgpack::type::variant> notification_channel_;
     boost::cobalt::promise<void> receive_task_;
     volatile bool connected_{};
 
@@ -98,14 +102,24 @@ private:
         auto reader = socket_.receive();
         while (reader) {
             const auto obj = co_await reader;
+            std::cout << obj << std::endl;
             if (obj.is_nil())
                 break;
 
             const auto& [type, id, error, result] = obj.as<Response>();
-            const auto it = requests_.find(id);
-            if (it != requests_.end()) {
-                std::cout << obj << std::endl;
-                co_await it->second->write(result);
+            if (type == RESPONSE) {
+                const auto it = requests_.find(id);
+                if (it != requests_.end()) {
+                    if (error.is_nil()) {
+                        co_await it->second->write(result);
+                    } else {
+                        // errors are returned as array of two elements, where the message is in the end
+                        co_await it->second->write(
+                            std::make_exception_ptr(std::runtime_error(error.as_vector().back().as_string())));
+                    }
+                }
+            } else if (type == NOTIFY) {
+                co_await notification_channel_.write(result);
             }
         }
     }
@@ -121,7 +135,7 @@ public:
     }
 
     template <typename... U>
-    auto call(const std::string& method, const U&... u) -> boost::cobalt::promise<DataType> {
+    auto call(const std::string& method, const U&... u) -> boost::cobalt::promise<msgpack::type::variant> {
         while (!connected_) {
             boost::asio::steady_timer tim{co_await boost::asio::this_coro::executor, std::chrono::milliseconds(100)};
             co_await tim.async_wait(boost::cobalt::use_op);
@@ -134,7 +148,18 @@ public:
 
         auto response = co_await channel.read();
         requests_.erase(id);
-        co_return response;
+        if (const auto exc = std::get_if<std::exception_ptr>(&response)) {
+            std::rethrow_exception(*exc);
+        } else {
+            co_return std::get<msgpack::type::variant>(response);
+        }
+    }
+
+    auto notifications() -> boost::cobalt::generator<msgpack::type::variant> {
+        while (notification_channel_.is_open()) {
+            co_yield co_await notification_channel_.read();
+        }
+        co_return {};
     }
 };
 
@@ -147,6 +172,15 @@ inline auto run(std::string host, uint16_t port) -> boost::cobalt::promise<void>
     auto client = Client{std::move(socket)};
     const auto info = co_await client.call("nvim_get_all_options_info");
     std::cout << info.which() << std::endl;
+
+    {
+        const auto error = co_await client.call("nvim_set_current_line");
+        std::cout << error.which() << std::endl;
+    }
+    {
+        const auto error = co_await client.call("nvim_win_get_cursor");
+        std::cout << error.which() << std::endl;
+    }
 
     // boost::process::ipstream out;
     // std::future<std::string> data;
