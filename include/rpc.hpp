@@ -89,47 +89,6 @@ public:
 };
 
 class Client {
-    using DataType = std::variant<msgpack::type::variant, std::exception_ptr>;
-
-    std::uint32_t msgid_ = 0;
-    Socket socket_;
-    std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<DataType>>> requests_;
-    boost::cobalt::channel<msgpack::type::variant> notification_channel_;
-    boost::cobalt::promise<void> receive_task_;
-    volatile bool connected_{};
-
-private:
-    auto receive() -> boost::cobalt::promise<void> {
-        using Response = std::tuple<std::uint32_t, std::uint32_t, msgpack::type::variant, msgpack::type::variant>;
-
-        co_await socket_.connect();
-        connected_ = true;
-
-        auto reader = socket_.receive();
-        while (reader) {
-            const auto obj = co_await reader;
-            if (obj.is_nil())
-                break;
-
-            const auto& [type, id, error, result] = obj.as<Response>();
-            const auto mt = static_cast<MessageType>(type);
-            if (mt == MessageType::Response) {
-                const auto it = requests_.find(id);
-                if (it != requests_.end()) {
-                    if (error.is_nil()) {
-                        co_await it->second->write(result);
-                    } else {
-                        // errors are returned as array of two elements, where the message is in the end
-                        co_await it->second->write(
-                            std::make_exception_ptr(std::runtime_error(error.as_vector().back().as_string())));
-                    }
-                }
-            } else if (mt == MessageType::Notify) {
-                co_await notification_channel_.write(result);
-            }
-        }
-    }
-
 public:
     Client(std::string host, std::uint16_t port)
         : socket_{Socket(std::move(host), port)}
@@ -166,6 +125,47 @@ public:
         }
         co_return {};
     }
+
+private:
+    auto receive() -> boost::cobalt::promise<void> {
+        using Response = std::tuple<std::uint32_t, std::uint32_t, msgpack::type::variant, msgpack::type::variant>;
+
+        co_await socket_.connect();
+        connected_ = true;
+
+        auto reader = socket_.receive();
+        while (reader) {
+            const auto obj = co_await reader;
+            if (obj.is_nil())
+                break;
+
+            const auto& [type, id, error, result] = obj.as<Response>();
+            const auto mt = static_cast<MessageType>(type);
+            if (mt == MessageType::Response) {
+                const auto it = requests_.find(id);
+                if (it != requests_.end()) {
+                    if (error.is_nil()) {
+                        co_await it->second->write(result);
+                    } else {
+                        // errors are returned as array of two elements, where the message is in the end
+                        co_await it->second->write(
+                            std::make_exception_ptr(std::runtime_error(error.as_vector().back().as_string())));
+                    }
+                }
+            } else if (mt == MessageType::Notify) {
+                co_await notification_channel_.write(result);
+            }
+        }
+    }
+
+    using ChannelDataType = std::variant<msgpack::type::variant, std::exception_ptr>;
+
+    std::uint32_t msgid_ = 0;
+    Socket socket_;
+    std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<ChannelDataType>>> requests_;
+    boost::cobalt::channel<msgpack::type::variant> notification_channel_;
+    boost::cobalt::promise<void> receive_task_;
+    volatile bool connected_{};
 };
 
 } // namespace rpc
