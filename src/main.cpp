@@ -1,7 +1,9 @@
 #include "rpc.hpp"
 
-int main() {
-    rpc::run("localhost", 6666);
+#include <boost/cobalt/main.hpp>
+
+boost::cobalt::main co_main(int argc, char* argv[]) {
+    co_await rpc::run("localhost", 6666);
 
     // coro::testCoro();
     // return 0;
@@ -19,5 +21,5 @@ int main() {
     // std::cout << "get_current_line = " << nvim.nvim_get_current_line() << std::endl;
     // nvim.vim_set_current_line("testhogefuga");
 
-    return 0;
+    co_return 0;
 }

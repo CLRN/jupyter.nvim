@@ -11,7 +11,6 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/cobalt.hpp>
-#include <boost/cobalt/op.hpp>
 #include <boost/process.hpp>
 
 #include <cstdint>
@@ -21,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace rpc {
@@ -40,7 +40,7 @@ public:
         : host_{std::move(host)}
         , port_(port) {}
 
-    auto connect() -> boost::cobalt::task<void> {
+    auto connect() -> boost::cobalt::promise<void> {
         auto ex = co_await boost::asio::this_coro::executor;
         auto resolver = tcp::resolver{ex};
         const auto results = co_await resolver.async_resolve(host_, std::to_string(port_), boost::cobalt::use_op);
@@ -65,7 +65,7 @@ public:
         co_await socket_->async_send(boost::asio::buffer(buffer.data(), buffer.size()), boost::cobalt::use_op);
     }
 
-    auto receive(boost::asio::io_context&) -> boost::cobalt::generator<msgpack::object> {
+    auto receive() -> boost::cobalt::generator<msgpack::object> {
         msgpack::unpacker pac;
         const auto increase = pac.buffer_capacity();
 
@@ -87,12 +87,15 @@ class Client {
     std::uint32_t msgid_ = 0;
     Socket socket_;
     std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<msgpack::object>>> requests_;
-    boost::cobalt::task<void> init_task_;
+    boost::cobalt::promise<void> receive_task_;
+    volatile bool connected_{};
 
 private:
-    auto receive(boost::asio::io_context& ctx) -> boost::cobalt::task<void> {
-        co_await init_task_;
-        auto reader = socket_.receive(ctx);
+    auto receive() -> boost::cobalt::promise<void> {
+        std::cout << "receive start" << std::endl;
+        co_await connect();
+
+        auto reader = socket_.receive();
         while (true) {
             auto obj = co_await reader;
             std::cout << obj << std::endl;
@@ -100,16 +103,27 @@ private:
     }
 
 public:
-    Client(Socket socket, boost::asio::io_context& ctx)
+    Client(Socket socket)
         : socket_(std::move(socket))
-        , init_task_{socket_.connect()} {
-        boost::cobalt::spawn(ctx, receive(ctx), boost::asio::detached);
+        , receive_task_{receive()} {}
+
+    auto connect() -> boost::cobalt::promise<void> {
+        co_await socket_.connect();
+        std::cout << "connected" << std::endl;
+        connected_ = true;
     }
 
     template <typename... U>
     auto send(const std::string& method, const U&... u) -> boost::cobalt::promise<msgpack::object> {
-        co_await init_task_;
-        auto& channel = requests_[msgid_++].emplace(1);
+        std::cout << "send start" << std::endl;
+        while (!connected_) {
+            boost::asio::steady_timer tim{co_await boost::asio::this_coro::executor, std::chrono::milliseconds(100)};
+            co_await tim.async_wait(boost::cobalt::use_op);
+        }
+
+        auto& channel = requests_[msgid_].emplace(1);
+        std::cout << "sending" << std::endl;
+        co_await socket_.send(msgid_++, method, std::forward(u)...);
         co_return co_await channel.read();
     }
 };
@@ -118,10 +132,11 @@ public:
 // Read: '[1,6,null,"#"]'
 // Read: '[1,7,null,null]' - set line success
 //
-inline auto run(std::string host, uint16_t port) {
-    auto ctx = boost::asio::io_context{};
+inline auto run(std::string host, uint16_t port) -> boost::cobalt::promise<void> {
     auto socket = Socket{std::move(host), port};
-    auto client = Client{std::move(socket), ctx};
+    auto client = Client{std::move(socket)};
+    // co_await client.connect();
+    co_await client.send("nvim_get_all_options_info");
 
     // boost::process::ipstream out;
     // std::future<std::string> data;
@@ -132,54 +147,54 @@ inline auto run(std::string host, uint16_t port) {
     // const auto obj = msgpack::unpack(s.data(), s.size());
     // std::cout << obj.get() << std::endl;
 
-    auto runner = [&] -> boost::cobalt::task<void> {
-        co_await client.send("nvim_get_all_options_info");
-        // co_await socket.connect();
-        //
-        // auto server = [&]() -> boost::asio::awaitable<void> {
-        //     while (true) {
-        //         // co_await socket.send("nvim_get_current_line");
-        //         // co_await socket.send("nvim_set_current_line", "test");
-        //         // co_await socket.send("nvim_win_get_cursor", 0);
-        //         // co_await socket.send("nvim_win_get_cursor", 0);
-        //         // function vim.api.nvim_buf_set_lines(buffer, start, end_, strict_indexing, replacement) end
-        //         // co_await socket.send("nvim_buf_set_lines", 0, 0, 20, false, std::vector<std::string>{"aa", "bb"});
-        //         // next to try:
-        //         // co_await socket.send("nvim_buf_set_extmark", 0, 0, 20, 5,
-        //         //                      std::vector<std::string>{std::vector<std::string>{"test"}, "O"});
-        //
-        //         // local mark_id = vim.api.nvim_buf_set_extmark(vim.api.nvim_get_current_buf(), ns_id, line_num,
-        //         // col_num, {
-        //         //   virt_lines = virt_lines,
-        //         //   sign_text = "O",
-        //         // })
-        //         // co_await socket.send("nvim_get_all_options_info");
-        //         auto timer =
-        //             boost::asio::steady_timer{co_await boost::asio::this_coro::executor, std::chrono::seconds(5)};
-        //         co_await timer.async_wait(boost::asio::use_awaitable);
-        //     }
-        // };
-        //
-        // auto client = [&](boost::asio::io_context& ctx) -> boost::asio::experimental::coro<void> {
-        //     auto reader = socket.receive(ctx);
-        //     while (auto l = co_await reader) {
-        //         std::cout << *l << std::endl;
-        //     }
-        // };
-        //
-        // auto coro = client(ctx);
-        // boost::asio::co_spawn(ctx, server, boost::asio::detached);
-        // co_await coro.async_resume(boost::asio::use_awaitable);
-        // co_await (server() && coro.async_resume(boost::asio::use_awaitable));
-    };
+    // auto runner = [&] -> boost::cobalt::task<void> {
+    //     // co_await socket.connect();
+    //     //
+    //     // auto server = [&]() -> boost::asio::awaitable<void> {
+    //     //     while (true) {
+    //     //         // co_await socket.send("nvim_get_current_line");
+    //     //         // co_await socket.send("nvim_set_current_line", "test");
+    //     //         // co_await socket.send("nvim_win_get_cursor", 0);
+    //     //         // co_await socket.send("nvim_win_get_cursor", 0);
+    //     //         // function vim.api.nvim_buf_set_lines(buffer, start, end_, strict_indexing, replacement) end
+    //     //         // co_await socket.send("nvim_buf_set_lines", 0, 0, 20, false, std::vector<std::string>{"aa",
+    //     "bb"});
+    //     //         // next to try:
+    //     //         // co_await socket.send("nvim_buf_set_extmark", 0, 0, 20, 5,
+    //     //         //                      std::vector<std::string>{std::vector<std::string>{"test"}, "O"});
+    //     //
+    //     //         // local mark_id = vim.api.nvim_buf_set_extmark(vim.api.nvim_get_current_buf(), ns_id, line_num,
+    //     //         // col_num, {
+    //     //         //   virt_lines = virt_lines,
+    //     //         //   sign_text = "O",
+    //     //         // })
+    //     //         // co_await socket.send("nvim_get_all_options_info");
+    //     //         auto timer =
+    //     //             boost::asio::steady_timer{co_await boost::asio::this_coro::executor, std::chrono::seconds(5)};
+    //     //         co_await timer.async_wait(boost::asio::use_awaitable);
+    //     //     }
+    //     // };
+    //     //
+    //     // auto client = [&](boost::asio::io_context& ctx) -> boost::asio::experimental::coro<void> {
+    //     //     auto reader = socket.receive(ctx);
+    //     //     while (auto l = co_await reader) {
+    //     //         std::cout << *l << std::endl;
+    //     //     }
+    //     // };
+    //     //
+    //     // auto coro = client(ctx);
+    //     // boost::asio::co_spawn(ctx, server, boost::asio::detached);
+    //     // co_await coro.async_resume(boost::asio::use_awaitable);
+    //     // co_await (server() && coro.async_resume(boost::asio::use_awaitable));
+    // };
 
-    try {
-        boost::cobalt::spawn(ctx, runner(), boost::asio::detached);
-        const int cnt = ctx.run();
-    } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-    } catch (...) {
-        std::cerr << "unknown error" << std::endl;
-    }
+    // try {
+    //     boost::cobalt::spawn(ctx, runner(), boost::asio::detached);
+    //     const int cnt = ctx.run();
+    // } catch (const std::exception& e) {
+    //     std::cerr << e.what() << std::endl;
+    // } catch (...) {
+    //     std::cerr << "unknown error" << std::endl;
+    // }
 }
 } // namespace rpc
