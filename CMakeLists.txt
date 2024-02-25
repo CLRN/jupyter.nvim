@@ -1,50 +1,40 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(neovim_client_cpp)
+project(neovim-cpp)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 23)
-add_compile_options(
-  -Wno-deprecated-declarations
-  -DMSGPACK_USE_X3_PARSE
-  -DBOOST_COBALT_NO_PMR
-)
 
+# Boost
 include(FetchContent)
-
 FetchContent_Declare(
   Boost
   URL https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost-1.84.0.tar.xz
   URL_MD5 893b5203b862eb9bbd08553e24ff146a
   DOWNLOAD_EXTRACT_TIMESTAMP ON
 )
-
 set(BOOST_INCLUDE_LIBRARIES asio cobalt)
 FetchContent_MakeAvailable(Boost)
 
-# find_package(Boost REQUIRED COMPONENTS asio)
-
-include_directories(
-    include
-    src
-    gen
-    ${Boost_INCLUDE_DIRS}
-    ${MSGPACK_SOURCE_DIR}/include
-)
-
+# msgpack
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
 
-add_executable(test)
-
-target_sources(test
-  PRIVATE
-    src/main.cpp
-    gen/nvim.hpp
-  PUBLIC
-  FILE_SET CXX_MODULES FILES
+# main library
+add_library(${CMAKE_PROJECT_NAME} INTERFACE)
+target_include_directories(${CMAKE_PROJECT_NAME} INTERFACE 
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${MSGPACK_SOURCE_DIR}/include
 )
-
-target_link_libraries(test msgpack-cxx Boost::asio Boost::cobalt)
+target_link_libraries(${CMAKE_PROJECT_NAME} INTERFACE 
+  msgpack-cxx 
+  Boost::asio 
+  Boost::cobalt
+)
+target_compile_options(${CMAKE_PROJECT_NAME} INTERFACE
+  -Wno-deprecated-declarations
+  -DMSGPACK_USE_X3_PARSE
+  -DBOOST_COBALT_NO_PMR
+)
 
 set(HEADER_FILES 
   <boost/asio.hpp>
@@ -58,16 +48,10 @@ set(HEADER_FILES
   <unordered_map>
   <utility>
 )
-target_precompile_headers(test PRIVATE ${HEADER_FILES})
+target_precompile_headers(${CMAKE_PROJECT_NAME} INTERFACE ${HEADER_FILES})
 
-find_package(Python3)
-if (Python3_Interpreter_FOUND)
-    add_custom_target(auto_gen_api
-        COMMAND python3 ${CMAKE_SOURCE_DIR}/gen_api.py
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        COMMENT "Autogen nvim interface"
-        DEPENDS ${CMAKE_SOURCE_DIR}/templates/nvim.hpp
-    )
-endif()
+# test executable
+add_executable(test)
+target_sources(test PRIVATE src/main.cpp)
+target_link_libraries(test ${CMAKE_PROJECT_NAME})
 
-add_dependencies(test auto_gen_api)

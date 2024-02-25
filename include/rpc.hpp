@@ -19,7 +19,7 @@ namespace rpc {
 
 using boost::asio::ip::tcp;
 
-enum { REQUEST = 0, RESPONSE = 1, NOTIFY = 2 };
+enum class MessageType { Request = 0, Response = 1, Notify = 2 };
 
 class Socket {
     const std::string host_;
@@ -30,6 +30,12 @@ public:
     Socket(std::string host, std::uint16_t port)
         : host_{std::move(host)}
         , port_(port) {}
+
+    auto close() -> void {
+        if (socket_)
+            socket_->close();
+        socket_.reset();
+    }
 
     auto connect() -> boost::cobalt::promise<void> {
         auto ex = co_await boost::asio::this_coro::executor;
@@ -47,7 +53,7 @@ public:
         msgpack::packer<msgpack::sbuffer> pk(&buffer);
 
         pk.pack_array(4);
-        pk.pack(static_cast<std::uint32_t>(REQUEST));
+        pk.pack(static_cast<std::uint32_t>(MessageType::Request));
         pk.pack(msgid++);
         pk.pack(method);
         pk.pack_array(sizeof...(u));
@@ -102,12 +108,12 @@ private:
         auto reader = socket_.receive();
         while (reader) {
             const auto obj = co_await reader;
-            std::cout << obj << std::endl;
             if (obj.is_nil())
                 break;
 
             const auto& [type, id, error, result] = obj.as<Response>();
-            if (type == RESPONSE) {
+            const auto mt = static_cast<MessageType>(type);
+            if (mt == MessageType::Response) {
                 const auto it = requests_.find(id);
                 if (it != requests_.end()) {
                     if (error.is_nil()) {
@@ -118,24 +124,23 @@ private:
                             std::make_exception_ptr(std::runtime_error(error.as_vector().back().as_string())));
                     }
                 }
-            } else if (type == NOTIFY) {
+            } else if (mt == MessageType::Notify) {
                 co_await notification_channel_.write(result);
             }
         }
     }
 
 public:
-    Client(Socket socket)
-        : socket_(std::move(socket))
+    Client(std::string host, std::uint16_t port)
+        : socket_{Socket(std::move(host), port)}
         , receive_task_{receive()} {}
 
     ~Client() {
-        receive_task_.cancel();
-        receive_task_.attach();
+        socket_.close();
     }
 
-    template <typename... U>
-    auto call(const std::string& method, const U&... u) -> boost::cobalt::promise<msgpack::type::variant> {
+    template <typename... Args>
+    auto call(const std::string& method, const Args&... a) -> boost::cobalt::task<msgpack::type::variant> {
         while (!connected_) {
             boost::asio::steady_timer tim{co_await boost::asio::this_coro::executor, std::chrono::milliseconds(100)};
             co_await tim.async_wait(boost::cobalt::use_op);
@@ -144,7 +149,7 @@ public:
 
         auto& channel = requests_[id].emplace(1);
 
-        co_await socket_.send(id, method, u...);
+        co_await socket_.send(id, method, a...);
 
         auto response = co_await channel.read();
         requests_.erase(id);
@@ -163,74 +168,4 @@ public:
     }
 };
 
-// Read: '[1,3,[0,"Wrong number of arguments: expecting 1 but got 0"],null]'
-// Read: '[1,6,null,"#"]'
-// Read: '[1,7,null,null]' - set line success
-//
-inline auto run(std::string host, uint16_t port) -> boost::cobalt::promise<void> {
-    auto socket = Socket{std::move(host), port};
-    auto client = Client{std::move(socket)};
-    const auto info = co_await client.call("nvim_get_all_options_info");
-    auto mm = info.as_multimap();
-    std::cout << info.which() << std::endl;
-
-    // boost::process::ipstream out;
-    // std::future<std::string> data;
-    // if (boost::process::system("nvim --api-info", boost::process::std_out > data)) {
-    //     throw std::runtime_error("unable to read nvim API info");
-    // }
-    // const auto s = data.get();
-    // const auto obj = msgpack::unpack(s.data(), s.size());
-    // std::cout << obj.get() << std::endl;
-
-    // auto runner = [&] -> boost::cobalt::task<void> {
-    //     // co_await socket.connect();
-    //     //
-    //     // auto server = [&]() -> boost::asio::awaitable<void> {
-    //     //     while (true) {
-    //     //         // co_await socket.send("nvim_get_current_line");
-    //     //         // co_await socket.send("nvim_set_current_line", "test");
-    //     //         // co_await socket.send("nvim_win_get_cursor", 0);
-    //     //         // co_await socket.send("nvim_win_get_cursor", 0);
-    //     //         // function vim.api.nvim_buf_set_lines(buffer, start, end_, strict_indexing, replacement) end
-    //     //         // co_await socket.send("nvim_buf_set_lines", 0, 0, 20, false, std::vector<std::string>{"aa",
-    //     "bb"});
-    //     //         // next to try:
-    //     //         // co_await socket.send("nvim_buf_set_extmark", 0, 0, 20, 5,
-    //     //         //                      std::vector<std::string>{std::vector<std::string>{"test"}, "O"});
-    //     //
-    //     //         // local mark_id = vim.api.nvim_buf_set_extmark(vim.api.nvim_get_current_buf(), ns_id, line_num,
-    //     //         // col_num, {
-    //     //         //   virt_lines = virt_lines,
-    //     //         //   sign_text = "O",
-    //     //         // })
-    //     //         // co_await socket.send("nvim_get_all_options_info");
-    //     //         auto timer =
-    //     //             boost::asio::steady_timer{co_await boost::asio::this_coro::executor, std::chrono::seconds(5)};
-    //     //         co_await timer.async_wait(boost::asio::use_awaitable);
-    //     //     }
-    //     // };
-    //     //
-    //     // auto client = [&](boost::asio::io_context& ctx) -> boost::asio::experimental::coro<void> {
-    //     //     auto reader = socket.receive(ctx);
-    //     //     while (auto l = co_await reader) {
-    //     //         std::cout << *l << std::endl;
-    //     //     }
-    //     // };
-    //     //
-    //     // auto coro = client(ctx);
-    //     // boost::asio::co_spawn(ctx, server, boost::asio::detached);
-    //     // co_await coro.async_resume(boost::asio::use_awaitable);
-    //     // co_await (server() && coro.async_resume(boost::asio::use_awaitable));
-    // };
-
-    // try {
-    //     boost::cobalt::spawn(ctx, runner(), boost::asio::detached);
-    //     const int cnt = ctx.run();
-    // } catch (const std::exception& e) {
-    //     std::cerr << e.what() << std::endl;
-    // } catch (...) {
-    //     std::cerr << "unknown error" << std::endl;
-    // }
-}
 } // namespace rpc

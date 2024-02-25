@@ -1,27 +1,23 @@
 #include "rpc.hpp"
-#include "nvim.hpp"
 
-#include <boost/cobalt/main.hpp>
+auto run() -> boost::cobalt::task<int> {
+    auto client = rpc::Client{"localhost", 6666};
+    std::cout << (co_await client.call("nvim_eval", "(3 + 2) * 4")).as_uint64_t() << std::endl;
+    std::cout << (co_await client.call("nvim_eval", "(3 + 2) * 4.1")).as_double() << std::endl;
 
-boost::cobalt::main co_main(int argc, char* argv[]) {
-    co_await rpc::run("localhost", 6666);
-    nvim::Nvim n{"localhost", 6666};
+    std::cout << "get_current_line = " << (co_await client.call("nvim_get_current_line")).as_string() << std::endl;
 
-    // coro::testCoro();
-    // return 0;
-    //
-    // nvim::Socket s{};
-    //
-    // s.connect_tcp("localhost", "6666", 999);
-    // char buf[] = "test";
-    // s.write(buf, sizeof(buf) - 1, 999);
-    // s.read(buf, 4, 999);
+    co_await client.call("nvim_set_current_line", "hello");
 
-    // nvim::Nvim nvim;
-    // nvim.connect_tcp("localhost", "6666");
-    // nvim.nvim_eval("( 3 + 2 ) * 4");
-    // std::cout << "get_current_line = " << nvim.nvim_get_current_line() << std::endl;
-    // nvim.vim_set_current_line("testhogefuga");
-
+    std::cout << "get_current_line = " << (co_await client.call("nvim_get_current_line")).as_string() << std::endl;
     co_return 0;
+}
+
+int main(int argc, char* argv[]) {
+    boost::asio::io_context ctx{BOOST_ASIO_CONCURRENCY_HINT_1};
+    boost::cobalt::this_thread::set_executor(ctx.get_executor());
+    auto f = boost::cobalt::spawn(ctx, run(), boost::asio::use_future);
+    ctx.run();
+
+    return f.get();
 }
