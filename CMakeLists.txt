@@ -46,22 +46,16 @@ target_sources(test
 target_link_libraries(test msgpack-cxx Boost::asio Boost::cobalt)
 
 set(HEADER_FILES 
-  <boost/asio/awaitable.hpp>
-  <boost/asio/co_spawn.hpp>
-  <boost/asio/connect.hpp>
-  <boost/asio/detached.hpp>
-  <boost/asio/experimental/awaitable_operators.hpp>
-  <boost/asio/experimental/coro.hpp>
-  <boost/asio/experimental/use_coro.hpp>
-  <boost/asio/ip/tcp.hpp>
-  <boost/asio/this_coro.hpp>
-  <boost/asio/use_awaitable.hpp>
+  <boost/asio.hpp>
   <boost/cobalt.hpp>
   <boost/process.hpp>
-  <iostream>
-  <string>
-  <vector>
   <msgpack.hpp>
+  <cstdint>
+  <iostream>
+  <optional>
+  <string>
+  <unordered_map>
+  <utility>
 )
 target_precompile_headers(test PRIVATE ${HEADER_FILES})
 
