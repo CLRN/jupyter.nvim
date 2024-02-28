@@ -5,6 +5,7 @@
 #include <boost/process.hpp>
 #include <msgpack.hpp>
 
+#include <cassert>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -30,6 +31,11 @@ public:
     Socket(std::string host, std::uint16_t port)
         : host_{std::move(host)}
         , port_(port) {}
+
+    Socket(Socket&& s)
+        : host_{std::move(s.host_)}
+        , port_{s.port_}
+        , socket_(std::move(s.socket_)) {}
 
     auto close() -> void {
         if (socket_)
@@ -67,7 +73,7 @@ public:
         const auto increase = pac.buffer_capacity();
 
         try {
-            while (true) {
+            while (socket_) {
                 pac.reserve_buffer(increase);
                 const auto n = co_await socket_->async_read_some(
                     boost::asio::buffer(pac.buffer(), pac.buffer_capacity()), boost::cobalt::use_op);
@@ -91,19 +97,23 @@ public:
 class Client {
 public:
     Client(std::string host, std::uint16_t port)
-        : socket_{Socket(std::move(host), port)}
-        , receive_task_{receive()} {}
+        : socket_{Socket(std::move(host), port)} {}
 
-    ~Client() {
-        socket_.close();
+    auto init() -> boost::cobalt::promise<void> {
+        co_await socket_.connect();
+
+        receive_task_.emplace(receive());
+
+        const auto info = (co_await call("nvim_get_api_info")).as_vector();
+        channel_ = info.front().as_uint64_t();
+    }
+
+    auto channel() -> std::uint32_t const {
+        return channel_;
     }
 
     template <typename... Args>
     auto call(const std::string& method, const Args&... a) -> boost::cobalt::task<msgpack::type::variant> {
-        while (!connected_) {
-            boost::asio::steady_timer tim{co_await boost::asio::this_coro::executor, std::chrono::milliseconds(100)};
-            co_await tim.async_wait(boost::cobalt::use_op);
-        }
         const auto id = msgid_++;
 
         auto& channel = requests_[id].emplace(1);
@@ -128,32 +138,30 @@ public:
 
 private:
     auto receive() -> boost::cobalt::promise<void> {
-        using Response = std::tuple<std::uint32_t, std::uint32_t, msgpack::type::variant, msgpack::type::variant>;
-
-        co_await socket_.connect();
-        connected_ = true;
-
         auto reader = socket_.receive();
         while (reader) {
             const auto obj = co_await reader;
             if (obj.is_nil())
                 break;
 
-            const auto& [type, id, error, result] = obj.as<Response>();
-            const auto mt = static_cast<MessageType>(type);
+            const auto& message = obj.as<std::vector<msgpack::type::variant>>();
+            const auto mt = static_cast<MessageType>(message[0].as_uint64_t());
             if (mt == MessageType::Response) {
-                const auto it = requests_.find(id);
+                // [type, id, error, result]
+                assert(message.size() == 4);
+                const auto it = requests_.find(message[1].as_uint64_t());
                 if (it != requests_.end()) {
-                    if (error.is_nil()) {
-                        co_await it->second->write(result);
+                    if (message[2].is_nil()) {
+                        co_await it->second->write(message[3]);
                     } else {
                         // errors are returned as array of two elements, where the message is in the end
                         co_await it->second->write(
-                            std::make_exception_ptr(std::runtime_error(error.as_vector().back().as_string())));
+                            std::make_exception_ptr(std::runtime_error(message[2].as_vector().back().as_string())));
                     }
                 }
             } else if (mt == MessageType::Notify) {
-                co_await notification_channel_.write(result);
+                // [type, message, args]
+                co_await notification_channel_.write(message[1]);
             }
         }
     }
@@ -161,11 +169,11 @@ private:
     using ChannelDataType = std::variant<msgpack::type::variant, std::exception_ptr>;
 
     std::uint32_t msgid_ = 0;
+    std::uint32_t channel_ = 0;
     Socket socket_;
     std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<ChannelDataType>>> requests_;
-    boost::cobalt::channel<msgpack::type::variant> notification_channel_;
-    boost::cobalt::promise<void> receive_task_;
-    volatile bool connected_{};
+    boost::cobalt::channel<msgpack::type::variant> notification_channel_{256};
+    std::optional<boost::cobalt::promise<void>> receive_task_;
 };
 
 } // namespace rpc
