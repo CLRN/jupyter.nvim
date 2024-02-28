@@ -13,8 +13,12 @@ FetchContent_Declare(
   URL_MD5 893b5203b862eb9bbd08553e24ff146a
   DOWNLOAD_EXTRACT_TIMESTAMP ON
 )
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+)
 set(BOOST_INCLUDE_LIBRARIES asio cobalt)
-FetchContent_MakeAvailable(Boost)
+FetchContent_MakeAvailable(Boost fmt)
 
 # msgpack
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
@@ -29,6 +33,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} INTERFACE
   msgpack-cxx 
   Boost::asio 
   Boost::cobalt
+  fmt
 )
 target_compile_options(${CMAKE_PROJECT_NAME} INTERFACE
   -Wno-deprecated-declarations
@@ -41,6 +46,7 @@ set(HEADER_FILES
   <boost/cobalt.hpp>
   <boost/process.hpp>
   <msgpack.hpp>
+  <fmt/core.h>
   <cstdint>
   <iostream>
   <optional>
