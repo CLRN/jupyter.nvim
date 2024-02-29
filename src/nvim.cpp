@@ -1,4 +1,5 @@
 #include "nvim.hpp"
+#include "fmt/format.h"
 #include "rpc.hpp"
 
 #include <algorithm>
@@ -14,7 +15,13 @@ auto transform(const T& from, Func&& f) {
 }
 
 Api::Api(std::string host, std::uint16_t port)
-    : rpc_(std::make_unique<rpc::Client>(std::move(host), port)) {}
+    : rpc_(std::make_shared<rpc::Client>(std::move(host), port)) {}
+
+auto Api::create(std::string host, std::uint16_t port) -> promise<Api> {
+    auto api = Api{std::move(host), port};
+    co_await api.rpc_->init();
+    co_return api;
+}
 
 auto Api::nvim_buf_add_highlight(integer buffer, integer ns_id, string hl_group, integer line, integer col_start,
                                  integer col_end) -> promise<integer> {
@@ -263,9 +270,30 @@ auto Api::nvim_create_augroup(string name, table<string, any> opts) -> promise<i
     co_return std::move(response.as_uint64_t());
 }
 
-auto Api::nvim_create_autocmd(any event, table<string, any> opts) -> promise<integer> {
-    auto response = co_await rpc_->call("nvim_create_autocmd", event, opts);
-    co_return std::move(response.as_uint64_t());
+auto Api::nvim_create_autocmd(any event, table<string, any> opts) -> generator<any> {
+    static int counter = 0;
+    const int id = counter++;
+
+    // create vimstript function that will act as a callback and notify via rpc
+    const std::string func = fmt::format(R"(
+function! Handle{1}{0}()
+  call rpcnotify({0}, '{1}', bufnr('%'))
+endfunction
+    )",
+                                         rpc_->channel(), id);
+    // register function
+    co_await rpc_->call("nvim_exec2", func, std::map<std::string, std::string>{});
+
+    // register autocmd
+    opts.emplace("callback", fmt::format("Handle{1}{0}", rpc_->channel(), id));
+    co_await rpc_->call("nvim_create_autocmd", event, opts);
+
+    // wait for notifications with this id
+    auto gen = rpc_->notifications(id);
+    while (gen) {
+        co_yield co_await gen;
+    }
+    co_return {};
 }
 
 auto Api::nvim_create_buf(boolean listed, boolean scratch) -> promise<integer> {

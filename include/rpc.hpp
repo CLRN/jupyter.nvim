@@ -129,9 +129,11 @@ public:
         }
     }
 
-    auto notifications() -> boost::cobalt::generator<msgpack::type::variant> {
-        while (notification_channel_.is_open()) {
-            co_yield co_await notification_channel_.read();
+    auto notifications(std::uint32_t id) -> boost::cobalt::generator<msgpack::type::variant> {
+        auto& channel = notifications_[id].emplace(128);
+
+        while (channel.is_open()) {
+            co_yield co_await channel.read();
         }
         co_return {};
     }
@@ -161,7 +163,10 @@ private:
                 }
             } else if (mt == MessageType::Notify) {
                 // [type, message, args]
-                co_await notification_channel_.write(message[1]);
+                const auto it = notifications_.find(std::stoi(message[1].as_string()));
+                if (it != notifications_.end()) {
+                    co_await it->second->write(message[2]);
+                }
             }
         }
     }
@@ -172,7 +177,7 @@ private:
     std::uint32_t channel_ = 0;
     Socket socket_;
     std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<ChannelDataType>>> requests_;
-    boost::cobalt::channel<msgpack::type::variant> notification_channel_{256};
+    std::unordered_map<std::uint32_t, std::optional<boost::cobalt::channel<msgpack::type::variant>>> notifications_;
     std::optional<boost::cobalt::promise<void>> receive_task_;
 };
 

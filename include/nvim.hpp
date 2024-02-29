@@ -1,10 +1,12 @@
 #pragma once
 
 #include <boost/cobalt/promise.hpp>
+#include <msgpack.hpp>
+
 #include <functional>
 #include <map>
-#include <msgpack.hpp>
 #include <string>
+#include <vector>
 
 namespace rpc {
 class Client;
@@ -12,11 +14,16 @@ class Client;
 namespace nvim {
 
 class Api {
-    std::unique_ptr<rpc::Client> rpc_;
+    std::shared_ptr<rpc::Client> rpc_;
+
+    Api(std::string host, std::uint16_t port);
 
 public:
     template <typename T>
     using promise = boost::cobalt::promise<T>;
+
+    template <typename T>
+    using generator = boost::cobalt::generator<T>;
 
     using integer = int;
     using number = int;
@@ -29,7 +36,7 @@ public:
 
     using function = std::function<void(any)>; // TODO: implement
 
-    Api(std::string host, std::uint16_t port);
+    static auto create(std::string host, std::uint16_t port) -> promise<Api>;
 
     // Adds a highlight to buffer.
     // Useful for plugins that dynamically generate highlights to a buffer (like
@@ -821,7 +828,7 @@ public:
     //              • nested (boolean) optional: defaults to false. Run nested
     //                autocommands `autocmd-nested`.
     // @return integer
-    auto nvim_create_autocmd(any event, table<string, any> opts) -> promise<integer>;
+    auto nvim_create_autocmd(any event, table<string, any> opts) -> generator<any>;
 
     // Creates a new, empty, unnamed buffer.
     //
