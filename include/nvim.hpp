@@ -714,7 +714,7 @@ public:
     //             • output: (boolean, default false) Whether to return command
     //               output.
     // @return string
-    auto nvim_cmd(table<string, any> opts) -> promise<string>;
+    auto nvim_cmd(table<string, any> cmd, table<string, any> opts) -> promise<string>;
 
     // Executes an Ex command.
     // On execution error: fails with Vimscript error, updates v:errmsg.

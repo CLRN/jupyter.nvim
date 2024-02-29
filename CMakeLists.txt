@@ -25,7 +25,9 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
 
 # main library
 add_library(${CMAKE_PROJECT_NAME})
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/nvim.cpp)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE 
+  src/nvim.cpp
+)
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${MSGPACK_SOURCE_DIR}/include
@@ -45,7 +47,6 @@ target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC
 set(HEADER_FILES 
   <boost/asio.hpp>
   <boost/cobalt.hpp>
-  <boost/process.hpp>
   <msgpack.hpp>
   <fmt/core.h>
   <cstdint>
@@ -54,6 +55,9 @@ set(HEADER_FILES
   <string>
   <unordered_map>
   <utility>
+  <algorithm>
+  <memory>
+  <ranges>
 )
 target_precompile_headers(${CMAKE_PROJECT_NAME} PUBLIC ${HEADER_FILES})
 
