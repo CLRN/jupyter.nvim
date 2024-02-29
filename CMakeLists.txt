@@ -24,18 +24,19 @@ FetchContent_MakeAvailable(Boost fmt)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
 
 # main library
-add_library(${CMAKE_PROJECT_NAME} INTERFACE)
-target_include_directories(${CMAKE_PROJECT_NAME} INTERFACE 
+add_library(${CMAKE_PROJECT_NAME})
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/nvim.cpp)
+target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${MSGPACK_SOURCE_DIR}/include
 )
-target_link_libraries(${CMAKE_PROJECT_NAME} INTERFACE 
+target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC  
   msgpack-cxx 
   Boost::asio 
   Boost::cobalt
   fmt
 )
-target_compile_options(${CMAKE_PROJECT_NAME} INTERFACE
+target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC
   -Wno-deprecated-declarations
   -DMSGPACK_USE_X3_PARSE
   -DBOOST_COBALT_NO_PMR
@@ -54,7 +55,7 @@ set(HEADER_FILES
   <unordered_map>
   <utility>
 )
-target_precompile_headers(${CMAKE_PROJECT_NAME} INTERFACE ${HEADER_FILES})
+target_precompile_headers(${CMAKE_PROJECT_NAME} PUBLIC ${HEADER_FILES})
 
 # test executable
 add_executable(test)
