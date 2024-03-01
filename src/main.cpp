@@ -1,7 +1,53 @@
+#include "fmt/format.h"
 #include "nvim.hpp"
+#include <boost/process.hpp>
+#include <fstream>
+#include <iterator>
+#include <string>
+
+auto get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
+    const auto output = co_await api.nvim_exec2("lua print(vim.fn['getpid']())", {{"output", true}});
+
+    int pid = std::atoi(output.find("output")->second.as_string().c_str());
+
+    std::string tty;
+    while (pid) {
+        std::future<std::string> data;
+        boost::process::system(fmt::format("ps -p {0} -o tty=", pid), boost::process::std_out > data);
+        tty = data.get();
+        if (!tty.starts_with("?")) {
+            if (!tty.empty()) {
+                tty.pop_back();
+            }
+            break;
+        }
+
+        std::future<std::string> pdata;
+        boost::process::system(fmt::format("ps -o ppid= {0}", pid), boost::process::std_out > pdata);
+        pid = std::stoi(pdata.get());
+    }
+
+    co_return "/dev/" + tty;
+}
 
 auto run() -> boost::cobalt::task<int> {
     auto api = co_await nvim::Api::create("localhost", 6666);
+
+    const auto tty = co_await get_tty(api);
+
+    std::ifstream ifs{"/code/jupyter.nvim/data", std::ios::binary};
+
+    assert(ifs.is_open());
+    std::string buf;
+    std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
+
+    {
+        std::ofstream ofs(tty, std::ios::binary);
+        ofs.write(buf.data(), buf.size());
+    }
+
+    co_return 0;
+
     std::cout << co_await api.nvim_get_current_line() << std::endl;
 
     auto generator = api.nvim_create_autocmd({"BufWritePost", "BufReadPost"},

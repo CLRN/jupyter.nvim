@@ -2,7 +2,6 @@
 
 #include <boost/asio.hpp>
 #include <boost/cobalt.hpp>
-#include <boost/process.hpp>
 #include <msgpack.hpp>
 
 #include <cassert>

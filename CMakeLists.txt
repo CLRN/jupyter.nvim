@@ -53,8 +53,12 @@ target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC
 set(HEADER_FILES 
   <boost/asio.hpp>
   <boost/cobalt.hpp>
-  # <msgpack.hpp>
+  <boost/process.hpp>
+  <msgpack.hpp>
   <fmt/core.h>
+
+  <fstream>
+  <iterator>
   <cstdint>
   <iostream>
   <optional>
