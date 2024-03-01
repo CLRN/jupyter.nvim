@@ -3,16 +3,23 @@
 
 auto run() -> boost::cobalt::task<int> {
     auto api = co_await nvim::Api::create("localhost", 6666);
-    std::cout << co_await api.nvim_get_current_line() << std::endl;
+    try {
 
-    auto generator = api.nvim_create_autocmd({"BufEnter", "BufLeave"}, {});
-    while (generator) {
-        auto msg = co_await generator;
-        const auto buf = msg.as_vector().front().as_multimap();
-        std::cout << "new buf " << std::endl;
-        for (const auto& [k, v] : buf) {
-            std::cout << k.as_string() << "=" << (v.is_string() ? v.as_string() : std::to_string(v.as_uint64_t())) << std::endl;
+        std::cout << co_await api.nvim_get_current_line() << std::endl;
+
+        auto generator = api.nvim_create_autocmd({"BufEnter", "BufLeave"},
+                                                 {{"pattern", std::vector<nvim::Api::any>{"*.lua", "*.toml"}}});
+        while (generator) {
+            auto msg = co_await generator;
+            const auto buf = msg.as_vector().front().as_multimap();
+            std::cout << "new buf " << std::endl;
+            for (const auto& [k, v] : buf) {
+                std::cout << k.as_string() << "=" << (v.is_string() ? v.as_string() : std::to_string(v.as_uint64_t()))
+                          << std::endl;
+            }
         }
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
     }
 
     //

@@ -1,11 +1,12 @@
 #include "nvim.hpp"
-#include "fmt/format.h"
 #include "rpc.hpp"
 
+#include <fmt/format.h>
 #include <algorithm>
 #include <memory>
 #include <ranges>
 #include <sstream>
+#include <type_traits>
 
 namespace nvim {
 
@@ -15,6 +16,69 @@ inline auto transform(const T& from, Func&& f) {
     return std::vector<decltype(f(*from.begin()))>{r.begin(), r.end()};
 }
 
+struct LuaVisitor : boost::static_visitor<void> {
+    std::ostream& s_;
+    mutable bool is_value_{false};
+
+    LuaVisitor(std::ostream& os)
+        : s_{os} {}
+
+    void operator()(uint64_t v) const {
+        s_ << v;
+    }
+
+    void operator()(const msgpack::type::raw_ref& v) const {
+        s_ << v.str();
+    }
+
+    void operator()(const std::string& v) const {
+        if (is_value_) {
+            s_ << '"' << v << '"';
+        } else {
+            s_ << v;
+        }
+    }
+
+    void operator()(const std::vector<std::string>& v) const {
+        s_ << "{";
+        for (auto& e : v) {
+            s_ << '"' << e << '"' << ",";
+        }
+        s_ << "}";
+    }
+
+    void operator()(const std::vector<msgpack::type::variant>& v) const {
+        s_ << "{";
+        for (auto& e : v) {
+            is_value_ = true;
+            boost::apply_visitor(*this, e);
+            s_ << ",";
+        }
+        s_ << "}";
+    }
+
+    void operator()(const std::multimap<msgpack::type::variant, msgpack::type::variant>& v) const {
+        s_ << "{";
+        for (const auto& [k, v] : v) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(k)>, std::string>) {
+                (*this)(k);
+            } else {
+                is_value_ = false;
+                boost::apply_visitor(*this, k);
+            }
+            s_ << "=";
+            is_value_ = true;
+            boost::apply_visitor(*this, v);
+            s_ << ",";
+        }
+        s_ << "}";
+    }
+
+    template <typename T>
+    void operator()(T const& v) const {
+        assert(false && "not supported type");
+    }
+};
 Api::Api(std::string host, std::uint16_t port)
     : rpc_(std::make_shared<rpc::Client>(std::move(host), port)) {}
 
@@ -271,25 +335,26 @@ auto Api::nvim_create_augroup(string name, table<string, any> opts) -> promise<i
     co_return std::move(response.as_uint64_t());
 }
 
-auto Api::nvim_create_autocmd(const std::vector<std::string>& event, table<string, any> opts) -> generator<any> {
+auto Api::nvim_create_autocmd(std::vector<std::string> event, table<any, any> opts) -> generator<any> {
     static int counter = 0;
     const int id = counter++;
 
     // there is no easy way to handle callbacks via RPC, so wrap rpcnotify() call in a lua function
+    // use variant visitor to construct proper lua script
     std::ostringstream event_stream;
-    for (const auto& e : event)
-        event_stream << '"' << e << '"' << ", ";
+    boost::apply_visitor(LuaVisitor(event_stream), boost::variant<std::vector<std::string>>(std::move(event)));
 
+    // set callback explicitly to lua function
     std::ostringstream opt_stream;
-    opt_stream << fmt::format(R"(callback=function(ev) vim.fn["rpcnotify"]({0}, '{1}', ev) end,)", rpc_->channel(), id);
+    const auto body = fmt::format(R"(function(ev) vim.fn["rpcnotify"]({0}, '{1}', ev) end)", rpc_->channel(), id);
+    opts.emplace("callback", msgpack::type::raw_ref(body.data(), body.size()));
+    boost::apply_visitor(LuaVisitor(opt_stream), any(std::move(opts)));
 
-    // register function
-    co_await rpc_->call(
-        "nvim_exec2",
-        fmt::format(R"(lua vim.api.nvim_create_autocmd({{{0}}}, {{{1}}}))", event_stream.str(), opt_stream.str()),
-        std::map<std::string, std::string>{});
+    // register via lua API
+    const auto func = fmt::format(R"(lua vim.api.nvim_create_autocmd({0}, {1}))", event_stream.str(), opt_stream.str());
+    co_await rpc_->call("nvim_exec2", func, std::map<std::string, std::string>{});
 
-    // wait for notifications with this id
+    // wait for notifications with this id, return call arguments, which are going to be 'ev' dict from the callback
     auto gen = rpc_->notifications(id);
     while (gen) {
         co_yield co_await gen;

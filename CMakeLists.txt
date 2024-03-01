@@ -40,7 +40,6 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC
 )
 target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC
   -Wno-deprecated-declarations
-  -DMSGPACK_USE_X3_PARSE
   -DBOOST_COBALT_NO_PMR
 )
 
