@@ -17,11 +17,18 @@ FetchContent_Declare(
   fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
 )
-set(BOOST_INCLUDE_LIBRARIES asio cobalt)
-FetchContent_MakeAvailable(Boost fmt)
+FetchContent_Declare(
+  msgpack
+  GIT_REPOSITORY https://github.com/msgpack/msgpack-c.git
+  GIT_TAG 2c0040cef6e0cd9f871979bb6e6b57fa74de0d46 # cpp_master
+)
 
-# msgpack
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/msgpack)
+set(BOOST_INCLUDE_LIBRARIES asio cobalt)
+set(MSGPACK_CXX20 ON CACHE INTERNAL "")
+set(MSGPACK_USE_X3_PARSE ON CACHE INTERNAL "")
+set(MSGPACK_USE_STD_VARIANT_ADAPTOR ON CACHE INTERNAL "")
+
+FetchContent_MakeAvailable(Boost fmt msgpack)
 
 # main library
 add_library(${CMAKE_PROJECT_NAME})
@@ -46,7 +53,7 @@ target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC
 set(HEADER_FILES 
   <boost/asio.hpp>
   <boost/cobalt.hpp>
-  <msgpack.hpp>
+  # <msgpack.hpp>
   <fmt/core.h>
   <cstdint>
   <iostream>
