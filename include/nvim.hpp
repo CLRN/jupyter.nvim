@@ -828,7 +828,7 @@ public:
     //              • nested (boolean) optional: defaults to false. Run nested
     //                autocommands `autocmd-nested`.
     // @return integer
-    auto nvim_create_autocmd(any event, table<string, any> opts) -> generator<any>;
+    auto nvim_create_autocmd(const std::vector<std::string>& event, table<string, any> opts) -> generator<any>;
 
     // Creates a new, empty, unnamed buffer.
     //

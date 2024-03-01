@@ -5,11 +5,12 @@
 #include <algorithm>
 #include <memory>
 #include <ranges>
+#include <sstream>
 
 namespace nvim {
 
 template <typename T, typename Func>
-auto transform(const T& from, Func&& f) {
+inline auto transform(const T& from, Func&& f) {
     auto r = std::ranges::views::transform(from, std::move(f));
     return std::vector<decltype(f(*from.begin()))>{r.begin(), r.end()};
 }
@@ -270,23 +271,23 @@ auto Api::nvim_create_augroup(string name, table<string, any> opts) -> promise<i
     co_return std::move(response.as_uint64_t());
 }
 
-auto Api::nvim_create_autocmd(any event, table<string, any> opts) -> generator<any> {
+auto Api::nvim_create_autocmd(const std::vector<std::string>& event, table<string, any> opts) -> generator<any> {
     static int counter = 0;
     const int id = counter++;
 
-    // create vimstript function that will act as a callback and notify via rpc
-    const std::string func = fmt::format(R"(
-function! Handle{1}{0}()
-  call rpcnotify({0}, '{1}', bufnr('%'))
-endfunction
-    )",
-                                         rpc_->channel(), id);
-    // register function
-    co_await rpc_->call("nvim_exec2", func, std::map<std::string, std::string>{});
+    // there is no easy way to handle callbacks via RPC, so wrap rpcnotify() call in a lua function
+    std::ostringstream event_stream;
+    for (const auto& e : event)
+        event_stream << '"' << e << '"' << ", ";
 
-    // register autocmd
-    opts.emplace("callback", fmt::format("Handle{1}{0}", rpc_->channel(), id));
-    co_await rpc_->call("nvim_create_autocmd", event, opts);
+    std::ostringstream opt_stream;
+    opt_stream << fmt::format(R"(callback=function(ev) vim.fn["rpcnotify"]({0}, '{1}', ev) end,)", rpc_->channel(), id);
+
+    // register function
+    co_await rpc_->call(
+        "nvim_exec2",
+        fmt::format(R"(lua vim.api.nvim_create_autocmd({{{0}}}, {{{1}}}))", event_stream.str(), opt_stream.str()),
+        std::map<std::string, std::string>{});
 
     // wait for notifications with this id
     auto gen = rpc_->notifications(id);
