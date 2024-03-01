@@ -4,7 +4,7 @@ auto run() -> boost::cobalt::task<int> {
     auto api = co_await nvim::Api::create("localhost", 6666);
     std::cout << co_await api.nvim_get_current_line() << std::endl;
 
-    auto generator = api.nvim_create_autocmd({"BufWritePost", "BufReadPost_"},
+    auto generator = api.nvim_create_autocmd({"BufWritePost", "BufReadPost"},
                                              {{"pattern", std::vector<nvim::Api::any>{"*.lua", "*.toml"}}});
     while (generator) {
         auto msg = co_await generator;

@@ -5,7 +5,7 @@ project(neovim-cpp)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 23)
 
-# Boost
+# 3rd party
 include(FetchContent)
 FetchContent_Declare(
   Boost
