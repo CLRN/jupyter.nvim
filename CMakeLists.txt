@@ -14,21 +14,22 @@ FetchContent_Declare(
   DOWNLOAD_EXTRACT_TIMESTAMP ON
 )
 FetchContent_Declare(
-  fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-)
-FetchContent_Declare(
   msgpack
   GIT_REPOSITORY https://github.com/msgpack/msgpack-c.git
   GIT_TAG 2c0040cef6e0cd9f871979bb6e6b57fa74de0d46 # cpp_master
+)
+FetchContent_Declare(
+  ueberzugpp
+  GIT_REPOSITORY https://github.com/CLRN/ueberzugpp.git
 )
 
 set(BOOST_INCLUDE_LIBRARIES asio cobalt)
 set(MSGPACK_CXX20 ON CACHE INTERNAL "")
 set(MSGPACK_USE_X3_PARSE ON CACHE INTERNAL "")
 set(MSGPACK_USE_STD_VARIANT_ADAPTOR ON CACHE INTERNAL "")
+set(ENABLE_X11 OFF CACHE INTERNAL "")
 
-FetchContent_MakeAvailable(Boost fmt msgpack)
+FetchContent_MakeAvailable(Boost msgpack ueberzugpp)
 
 # main library
 add_library(${CMAKE_PROJECT_NAME})
@@ -44,6 +45,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC
   Boost::asio 
   Boost::cobalt
   fmt
+  ueberzug-lib
 )
 target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC
   -Wno-deprecated-declarations

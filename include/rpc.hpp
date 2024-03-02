@@ -62,7 +62,9 @@ public:
         pk.pack(msgid++);
         pk.pack(method);
         pk.pack_array(sizeof...(u));
-        int _[] = {(pk.pack(u), 0)...};
+        if constexpr (sizeof...(u)) {
+            int _[] = {(pk.pack(u), 0)...};
+        }
 
         co_await socket_->async_send(boost::asio::buffer(buffer.data(), buffer.size()), boost::cobalt::use_op);
     }
@@ -107,7 +109,7 @@ public:
         channel_ = info.front().as_uint64_t();
     }
 
-    auto channel() -> std::uint32_t const {
+    auto channel() -> std::uint32_t {
         return channel_;
     }
 

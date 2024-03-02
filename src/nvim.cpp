@@ -75,7 +75,7 @@ struct LuaVisitor : boost::static_visitor<void> {
     }
 
     template <typename T>
-    void operator()(T const& v) const {
+    void operator()(T const&) const {
         assert(false && "not supported type");
     }
 };
@@ -99,7 +99,7 @@ auto Api::nvim_buf_attach(integer buffer, boolean send_buffer, table<string, any
     co_return std::move(response.as_bool());
 }
 
-auto Api::nvim_buf_call(integer buffer, function fun) -> promise<any> {
+auto Api::nvim_buf_call(integer buffer, function) -> promise<any> {
     co_return co_await rpc_->call("nvim_buf_call", buffer);
 }
 
@@ -855,7 +855,7 @@ auto Api::nvim_tabpage_set_win(integer tabpage, integer win) -> promise<void> {
     co_await rpc_->call("nvim_tabpage_set_win", tabpage, win);
 }
 
-auto Api::nvim_win_call(integer window, function fun) -> promise<any> {
+auto Api::nvim_win_call(integer window, function) -> promise<any> {
     co_return co_await rpc_->call("nvim_win_call", window);
 }
 
