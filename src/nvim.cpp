@@ -1,12 +1,12 @@
 #include "nvim.hpp"
 #include "rpc.hpp"
 
-#include <algorithm>
 #include <fmt/format.h>
+#include <range/v3/all.hpp>
+
+#include <algorithm>
 #include <fstream>
 #include <memory>
-#include <range/v3/all.hpp>
-#include <ranges>
 #include <sstream>
 #include <type_traits>
 
@@ -14,7 +14,7 @@ namespace nvim {
 
 template <typename T, typename Func>
 inline auto transform(const T& from, Func&& f) {
-    auto r = std::ranges::views::transform(from, std::move(f));
+    auto r = ranges::views::transform(from, std::move(f));
     return std::vector<decltype(f(*from.begin()))>{r.begin(), r.end()};
 }
 
