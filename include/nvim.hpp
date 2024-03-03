@@ -39,7 +39,7 @@ public:
 
     static auto create(std::string host, std::uint16_t port) -> promise<Api>;
 
-    auto screen_size() -> promise<std::pair<int, int>>;
+    auto screen_size(int attempts = 5) -> promise<std::pair<int, int>>;
 
     // Adds a highlight to buffer.
     // Useful for plugins that dynamically generate highlights to a buffer (like

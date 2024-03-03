@@ -1,6 +1,7 @@
 #include "nvim.hpp"
 #include "rpc.hpp"
 
+#include <filesystem>
 #include <fmt/format.h>
 #include <range/v3/all.hpp>
 
@@ -84,7 +85,7 @@ struct LuaVisitor : boost::static_visitor<void> {
 Api::Api(std::string host, std::uint16_t port)
     : rpc_(std::make_shared<rpc::Client>(std::move(host), port)) {}
 
-auto Api::screen_size() -> promise<std::pair<int, int>> {
+auto Api::screen_size(int attempts) -> promise<std::pair<int, int>> {
     const int id = notification_id_cnt_++;
     const std::string lua_code = fmt::format(R"(
 local uv = require("luv")
@@ -97,40 +98,53 @@ local function close()
   timer:stop()
   timer:close()
   stdin:close()
-  stdout:close()
   uv.stop()
 end
 
-timer:start(1000, 0, close)
+timer:start(100, 0, close)
 stdin:read_start(function(err, data)
   result = data
   close()
 end)
 
 stdout:write("\x1b[14t")
+stdout:close()
 uv.run()
 vim.fn["rpcnotify"]({0}, '{1}', result)
     )",
+
                                              rpc_->channel(), id);
+
+    const std::string path = fmt::format("/tmp/nvim-cpp.{}.lua", id);
+
+    std::shared_ptr<void> dummy{nullptr, [&path](auto) {
+                                    std::filesystem::remove(path);
+                                }};
+
     {
-        std::ofstream ofs{"/tmp/code.lua"};
+        std::ofstream ofs{path};
         ofs.write(lua_code.data(), lua_code.size());
     }
 
     auto gen = rpc_->notifications(id);
-    co_await nvim_exec2("source /tmp/code.lua", {{"output", true}});
-    const auto res = co_await gen;
+    while (attempts > 0) {
+        co_await nvim_exec2(fmt::format("source {}", path), {});
+        const auto res = co_await gen;
 
-    const auto parts = res.as_vector().front().as_string() | ranges::views::split(';') |
-                       ranges::views::transform([](auto&& rng) {
-                           return std::string_view(&*rng.begin(), ranges::distance(rng));
-                       }) |
-                       ranges::view::drop_exactly(1) | ranges::views::transform([](auto s) {
-                           return std::atoi(s.data());
-                       }) |
-                       ranges::to<std::vector<int>>();
-    assert(parts.size() == 2);
-    co_return {parts.front(), parts.back()};
+        const auto parts = res.as_vector().front().as_string() | ranges::views::split(';') |
+                           ranges::views::transform([](auto&& rng) {
+                               return std::string_view(&*rng.begin(), ranges::distance(rng));
+                           }) |
+                           ranges::view::drop_exactly(1) | ranges::views::transform([](auto s) {
+                               return std::atoi(s.data());
+                           }) |
+                           ranges::to<std::vector<int>>();
+        if (parts.size() == 2)
+            co_return {parts.front(), parts.back()};
+
+        --attempts;
+    }
+    co_return {};
 }
 
 auto Api::create(std::string host, std::uint16_t port) -> promise<Api> {
