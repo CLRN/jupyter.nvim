@@ -58,6 +58,7 @@ set(HEADER_FILES
   <boost/process.hpp>
   <msgpack.hpp>
   <fmt/core.h>
+  <range/v3/all.hpp>
 
   <fstream>
   <iterator>

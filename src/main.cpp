@@ -1,5 +1,10 @@
 #include "fmt/format.h"
 #include "nvim.hpp"
+#include "spdlog/cfg/env.h"
+#include "spdlog/sinks/basic_file_sink.h"
+#include "spdlog/sinks/stdout_sinks.h"
+#include "spdlog/spdlog.h"
+#include "terminal.hpp"
 #include <boost/process.hpp>
 #include <fstream>
 #include <iterator>
@@ -31,20 +36,54 @@ auto get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
 }
 
 auto run() -> boost::cobalt::task<int> {
+
+    // // ::setenv("TERM_PROGRAM", "kitty", 0);
+    // std::ifstream ifs{"/code/jupyter.nvim/data", std::ios::binary};
+    //
+    // assert(ifs.is_open());
+    // std::string buf;
+    // std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
+    // std::cerr << buf << std::endl;
+    // // {
+    // //     std::ofstream ofs("/dev/pts/0", std::ios::binary);
+    // //     ofs.write(buf.data(), buf.size());
+    // // }
+    // co_return 0;
+    //
+    // spdlog::cfg::load_env_levels();
+    //
+    // spdlog::flush_on(spdlog::level::debug);
+    // spdlog::set_level(spdlog::level::debug);
+    //
+    // // const auto sink = std::make_shared<spdlog::sinks::stdout_sink_st>();
+    // const auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("/tmp/jupyter.cpp.log");
+    // const auto terminal_logger = std::make_shared<spdlog::logger>("terminal", sink);
+    // spdlog::initialize_logger(terminal_logger);
+    //
+    // const auto flags = Flags::instance();
+    // flags->use_escape_codes = true;
+    // Terminal t{};
+    // terminal_logger->debug("ioctl sizes: COLS={} ROWS={} XPIXEL={} YPIXEL={}", t.cols, t.rows, t.font_width,
+    // t.font_height); co_return 0;
+
     auto api = co_await nvim::Api::create("localhost", 6666);
+    // const auto output = co_await api.nvim_exec2("lua print(vim.fn['getpid']())", {{"output", true}});
+    // int pid = std::atoi(output.find("output")->second.as_string().c_str());
 
-    const auto tty = co_await get_tty(api);
+    const auto size = co_await api.screen_size();
 
-    std::ifstream ifs{"/code/jupyter.nvim/data", std::ios::binary};
+    // const auto screen_size = co_await api.nvim_exec2("source /code/jupyter.nvim/test.lua", {{"output", true}});
+    // const auto size = screen_size.find("output")->second.as_string();
+    std::cout << size.first << " " << size.second << std::endl;
 
-    assert(ifs.is_open());
-    std::string buf;
-    std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
+    // Terminal t{pid};
 
-    {
-        std::ofstream ofs(tty, std::ios::binary);
-        ofs.write(buf.data(), buf.size());
-    }
+    // const auto tty = co_await get_tty(api);
+
+    // {
+    //     std::ofstream ofs(tty, std::ios::binary);
+    //     ofs.write(buf.data(), buf.size());
+    // }
 
     co_return 0;
 
@@ -82,6 +121,8 @@ auto run() -> boost::cobalt::task<int> {
 }
 
 int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
     boost::asio::io_context ctx{BOOST_ASIO_CONCURRENCY_HINT_1};
     boost::cobalt::this_thread::set_executor(ctx.get_executor());
     auto f = boost::cobalt::spawn(ctx, run(), boost::asio::use_future);

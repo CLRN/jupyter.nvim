@@ -15,6 +15,7 @@ namespace nvim {
 
 class Api {
     std::shared_ptr<rpc::Client> rpc_;
+    int notification_id_cnt_{0};
 
     Api(std::string host, std::uint16_t port);
 
@@ -37,6 +38,8 @@ public:
     using function = std::function<void(any)>; // TODO: implement
 
     static auto create(std::string host, std::uint16_t port) -> promise<Api>;
+
+    auto screen_size() -> promise<std::pair<int, int>>;
 
     // Adds a highlight to buffer.
     // Useful for plugins that dynamically generate highlights to a buffer (like
