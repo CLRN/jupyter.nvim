@@ -35,6 +35,8 @@ FetchContent_MakeAvailable(Boost msgpack ueberzugpp)
 add_library(${CMAKE_PROJECT_NAME})
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE 
   src/nvim.cpp
+  src/kitty.cpp
+  src/nvim_graphics.cpp
 )
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}/include

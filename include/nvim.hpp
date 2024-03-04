@@ -39,7 +39,9 @@ public:
 
     static auto create(std::string host, std::uint16_t port) -> promise<Api>;
 
-    auto screen_size(int attempts = 5) -> promise<std::pair<int, int>>;
+    auto rpc_channel() const -> int;
+    auto next_notification_id() -> int;
+    auto notifications(std::uint32_t id) -> generator<any>;
 
     // Adds a highlight to buffer.
     // Useful for plugins that dynamically generate highlights to a buffer (like

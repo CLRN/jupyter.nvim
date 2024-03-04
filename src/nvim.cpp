@@ -85,72 +85,26 @@ struct LuaVisitor : boost::static_visitor<void> {
 Api::Api(std::string host, std::uint16_t port)
     : rpc_(std::make_shared<rpc::Client>(std::move(host), port)) {}
 
-auto Api::screen_size(int attempts) -> promise<std::pair<int, int>> {
-    const int id = notification_id_cnt_++;
-    const std::string lua_code = fmt::format(R"(
-local uv = require("luv")
-local timer = uv.new_timer()
-local stdin = uv.new_tty(0, true)
-local stdout = uv.new_tty(1, false)
-local result = ""
-
-local function close()
-  timer:stop()
-  timer:close()
-  stdin:close()
-  uv.stop()
-end
-
-timer:start(100, 0, close)
-stdin:read_start(function(err, data)
-  result = data
-  close()
-end)
-
-stdout:write("\x1b[14t")
-stdout:close()
-uv.run()
-vim.fn["rpcnotify"]({0}, '{1}', result)
-    )",
-
-                                             rpc_->channel(), id);
-
-    const std::string path = fmt::format("/tmp/nvim-cpp.{}.lua", id);
-
-    std::shared_ptr<void> dummy{nullptr, [&path](auto) {
-                                    std::filesystem::remove(path);
-                                }};
-
-    {
-        std::ofstream ofs{path};
-        ofs.write(lua_code.data(), lua_code.size());
-    }
-
-    auto gen = rpc_->notifications(id);
-    while (attempts > 0) {
-        co_await nvim_exec2(fmt::format("source {}", path), {});
-        const auto res = co_await gen;
-
-        const auto parts = res.as_vector().front().as_string() | ranges::views::split(';') |
-                           ranges::views::transform([](auto&& rng) {
-                               return std::string_view(&*rng.begin(), ranges::distance(rng));
-                           }) |
-                           ranges::view::drop_exactly(1) | ranges::views::transform([](auto s) {
-                               return std::atoi(s.data());
-                           }) |
-                           ranges::to<std::vector<int>>();
-        if (parts.size() == 2)
-            co_return {parts.front(), parts.back()};
-
-        --attempts;
-    }
-    co_return {};
-}
-
 auto Api::create(std::string host, std::uint16_t port) -> promise<Api> {
     auto api = Api{std::move(host), port};
     co_await api.rpc_->init();
     co_return api;
+}
+
+auto Api::rpc_channel() const -> int {
+    return rpc_->channel();
+}
+
+auto Api::next_notification_id() -> int {
+    return ++notification_id_cnt_;
+}
+
+auto Api::notifications(std::uint32_t id) -> Api::generator<any> {
+    auto gen = rpc_->notifications(id);
+    while (gen) {
+        co_yield co_await gen;
+    }
+    co_return {};
 }
 
 auto Api::nvim_buf_add_highlight(integer buffer, integer ns_id, string hl_group, integer line, integer col_start,
@@ -401,7 +355,7 @@ auto Api::nvim_create_augroup(string name, table<string, any> opts) -> promise<i
 }
 
 auto Api::nvim_create_autocmd(std::vector<std::string> event, table<any, any> opts) -> generator<any> {
-    const int id = notification_id_cnt_++;
+    const int id = next_notification_id();
 
     // there is no easy way to handle callbacks via RPC, so wrap rpcnotify() call in a lua function
     // use variant visitor to construct proper lua script

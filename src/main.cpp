@@ -1,42 +1,35 @@
 #include "fmt/format.h"
+#include "kitty.hpp"
 #include "nvim.hpp"
+#include "nvim_graphics.hpp"
 #include "spdlog/cfg/env.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_sinks.h"
 #include "spdlog/spdlog.h"
 #include "terminal.hpp"
 #include <boost/process.hpp>
+#include <cassert>
+#include <chrono>
+#include <cstddef>
 #include <fstream>
+#include <ios>
 #include <iterator>
+#include <ostream>
 #include <string>
 
-auto get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
-    const auto output = co_await api.nvim_exec2("lua print(vim.fn['getpid']())", {{"output", true}});
+#include <boost/beast/core/detail/base64.hpp>
 
-    int pid = std::atoi(output.find("output")->second.as_string().c_str());
+std::string get_data(const std::string& name) {
+    std::ifstream ifs{name, std::ios::binary};
+    ifs >> std::noskipws;
 
-    std::string tty;
-    while (pid) {
-        std::future<std::string> data;
-        boost::process::system(fmt::format("ps -p {0} -o tty=", pid), boost::process::std_out > data);
-        tty = data.get();
-        if (!tty.starts_with("?")) {
-            if (!tty.empty()) {
-                tty.pop_back();
-            }
-            break;
-        }
-
-        std::future<std::string> pdata;
-        boost::process::system(fmt::format("ps -o ppid= {0}", pid), boost::process::std_out > pdata);
-        pid = std::stoi(pdata.get());
-    }
-
-    co_return "/dev/" + tty;
+    assert(ifs.is_open());
+    std::string buf;
+    std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
+    return buf;
 }
 
 auto run() -> boost::cobalt::task<int> {
-
     // // ::setenv("TERM_PROGRAM", "kitty", 0);
     // std::ifstream ifs{"/code/jupyter.nvim/data", std::ios::binary};
     //
@@ -66,26 +59,28 @@ auto run() -> boost::cobalt::task<int> {
     // terminal_logger->debug("ioctl sizes: COLS={} ROWS={} XPIXEL={} YPIXEL={}", t.cols, t.rows, t.font_width,
     // t.font_height); co_return 0;
 
-    auto api = co_await nvim::Api::create("localhost", 6666);
     // const auto output = co_await api.nvim_exec2("lua print(vim.fn['getpid']())", {{"output", true}});
     // int pid = std::atoi(output.find("output")->second.as_string().c_str());
 
-    const auto size = co_await api.screen_size();
+    auto api = co_await nvim::Api::create("localhost", 6666);
+    auto graphics = nvim::Graphics{api};
+    // const auto size = co_await graphics.screen_size();
+    //
+    // std::cout << size.first << " " << size.second << std::endl;
+
+    auto remote = co_await graphics.remote();
+    kitty::Image im{remote, get_data("/code/jupyter.nvim/1064")};
+    for (int i = 0; i < 50; ++i) {
+        im.place(i * 2, 10);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    co_return 0;
 
     // const auto screen_size = co_await api.nvim_exec2("source /code/jupyter.nvim/test.lua", {{"output", true}});
     // const auto size = screen_size.find("output")->second.as_string();
-    std::cout << size.first << " " << size.second << std::endl;
 
     // Terminal t{pid};
-
-    // const auto tty = co_await get_tty(api);
-
-    // {
-    //     std::ofstream ofs(tty, std::ios::binary);
-    //     ofs.write(buf.data(), buf.size());
-    // }
-
-    co_return 0;
 
     std::cout << co_await api.nvim_get_current_line() << std::endl;
 
@@ -127,5 +122,4 @@ int main(int argc, char* argv[]) {
     boost::cobalt::this_thread::set_executor(ctx.get_executor());
     auto f = boost::cobalt::spawn(ctx, run(), boost::asio::use_future);
     ctx.run();
-    return f.get();
 }
