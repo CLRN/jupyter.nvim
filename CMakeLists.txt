@@ -19,17 +19,32 @@ FetchContent_Declare(
   GIT_TAG 2c0040cef6e0cd9f871979bb6e6b57fa74de0d46 # cpp_master
 )
 FetchContent_Declare(
-  ueberzugpp
-  GIT_REPOSITORY https://github.com/CLRN/ueberzugpp.git
+  nlohmann_json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+)
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+  GIT_TAG 10.2.1
+)
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG v1.13.0
+)
+FetchContent_Declare(
+  range-v3
+  GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
 )
 
 set(BOOST_INCLUDE_LIBRARIES asio cobalt)
 set(MSGPACK_CXX20 ON CACHE INTERNAL "")
 set(MSGPACK_USE_X3_PARSE ON CACHE INTERNAL "")
 set(MSGPACK_USE_STD_VARIANT_ADAPTOR ON CACHE INTERNAL "")
-set(ENABLE_X11 OFF CACHE INTERNAL "")
+set(SPDLOG_FMT_EXTERNAL ON CACHE INTERNAL "")
 
-FetchContent_MakeAvailable(Boost msgpack ueberzugpp)
+FetchContent_MakeAvailable(Boost msgpack nlohmann_json fmt spdlog range-v3)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
 
 # main library
 add_library(${CMAKE_PROJECT_NAME})
@@ -44,10 +59,15 @@ target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC
 )
 target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC  
   msgpack-cxx 
+  nlohmann_json::nlohmann_json
   Boost::asio 
   Boost::cobalt
-  fmt
-  ueberzug-lib
+  fmt::fmt
+  spdlog
+  range-v3
+  opencv_core 
+  opencv_imgproc 
+  opencv_imgcodecs
 )
 target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC
   -Wno-deprecated-declarations

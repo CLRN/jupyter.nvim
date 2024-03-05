@@ -1,6 +1,8 @@
 #include "nvim_graphics.hpp"
 #include "nvim.hpp"
 
+#include <fmt/core.h>
+
 #include <filesystem>
 
 namespace nvim {

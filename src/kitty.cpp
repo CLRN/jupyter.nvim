@@ -48,15 +48,14 @@ Cursor::Cursor(nvim::RemoteGraphics& nvim, int x, int y)
     nvim_.stream() << "\033[" << y << ";" << x << "f"; // move
 }
 
-Image::Image(nvim::RemoteGraphics& nvim, std::string content)
-    : nvim_{nvim}
-    , png_{std::move(content)} {
+Image::Image(nvim::RemoteGraphics& nvim, std::string_view content)
+    : nvim_{nvim} {
 
     static int id_cnt_{};
     id_ = ++id_cnt_;
 
-    std::vector<char> encoded(boost::beast::detail::base64::encoded_size(png_.size()));
-    boost::beast::detail::base64::encode(encoded.data(), png_.data(), png_.size());
+    std::vector<char> encoded(boost::beast::detail::base64::encoded_size(content.size()));
+    boost::beast::detail::base64::encode(encoded.data(), content.data(), content.size());
 
     std::vector<std::string_view> chunks;
     constexpr std::size_t chunk_size = 4096;
@@ -80,7 +79,6 @@ Image::Image(nvim::RemoteGraphics& nvim, std::string content)
 
 Image::Image(Image&& im)
     : nvim_{im.nvim_}
-    , png_{std::move(im.png_)}
     , id_{std::exchange(im.id_, 0)} {}
 
 Image::~Image() {
@@ -89,9 +87,9 @@ Image::~Image() {
     }
 }
 
-void Image::place(int x, int y, int id) {
+void Image::place(int x, int y, int w, int h, int id) {
     Cursor cursor{nvim_, x, y};
-    Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2};
+    Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2, 'c', w, 'r', h};
 }
 
 void Image::clear(int id) {

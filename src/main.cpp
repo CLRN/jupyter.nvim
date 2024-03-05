@@ -3,11 +3,10 @@
 #include "kitty.hpp"
 #include "nvim.hpp"
 #include "nvim_graphics.hpp"
-#include "spdlog/cfg/env.h"
-#include "spdlog/sinks/basic_file_sink.h"
+// #include "spdlog/cfg/env.h"
+// #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_sinks.h"
 #include "spdlog/spdlog.h"
-#include "terminal.hpp"
 #include <boost/process.hpp>
 #include <cassert>
 #include <chrono>
@@ -98,9 +97,12 @@ auto run() -> boost::cobalt::task<int> {
                 co_return;
 
             const auto pos = co_await api.nvim_win_get_position(win_id);
-            std::cout << pos[0] << " " << pos[1] << std::endl;
+            const auto w = co_await api.nvim_win_get_width(win_id);
+            const auto h = co_await api.nvim_win_get_height(win_id);
+            std::cout << pos[0] << " " << pos[1] << " w " << w << " h " << h << std::endl;
+
             for (auto& im : images_) {
-                im.place(pos.back(), pos.front(), win_id);
+                im.place(pos.back(), pos.front(), w, h, win_id);
             }
         }
 

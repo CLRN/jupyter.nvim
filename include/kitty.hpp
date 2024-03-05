@@ -20,15 +20,14 @@ public:
 
 class Image {
     nvim::RemoteGraphics& nvim_;
-    std::string png_;
     int id_{};
 
 public:
-    Image(nvim::RemoteGraphics& nvim, std::string content);
+    Image(nvim::RemoteGraphics& nvim, std::string_view content);
     Image(Image&& im);
     ~Image();
 
-    void place(int x, int y, int id = 0);
+    void place(int x, int y, int w, int h, int id = 0);
     void clear(int id = 0);
 };
 } // namespace kitty
