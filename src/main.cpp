@@ -1,3 +1,4 @@
+#include "boost/cobalt/race.hpp"
 #include "fmt/format.h"
 #include "kitty.hpp"
 #include "nvim.hpp"
@@ -10,7 +11,6 @@
 #include <boost/process.hpp>
 #include <cassert>
 #include <chrono>
-#include <cstddef>
 #include <fstream>
 #include <ios>
 #include <iterator>
@@ -18,6 +18,8 @@
 #include <string>
 
 #include <boost/beast/core/detail/base64.hpp>
+
+using kitty::Image;
 
 std::string get_data(const std::string& name) {
     std::ifstream ifs{name, std::ios::binary};
@@ -27,6 +29,16 @@ std::string get_data(const std::string& name) {
     std::string buf;
     std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
     return buf;
+}
+
+auto print_map(int win, const auto& data) {
+
+    std::cout << "win: " << win << ", ";
+
+    for (const auto& [k, v] : data) {
+        std::cout << k.as_string() << "=" << (v.is_string() ? v.as_string() : std::to_string(v.as_uint64_t())) << ", ";
+    }
+    std::cout << std::endl;
 }
 
 auto run() -> boost::cobalt::task<int> {
@@ -64,16 +76,163 @@ auto run() -> boost::cobalt::task<int> {
 
     auto api = co_await nvim::Api::create("localhost", 6666);
     auto graphics = nvim::Graphics{api};
-    // const auto size = co_await graphics.screen_size();
-    //
-    // std::cout << size.first << " " << size.second << std::endl;
 
     auto remote = co_await graphics.remote();
-    kitty::Image im{remote, get_data("/code/jupyter.nvim/1064")};
-    for (int i = 0; i < 50; ++i) {
-        im.place(i * 2, 10);
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+
+    const auto augroup = co_await api.nvim_create_augroup("jupyter", {});
+
+    class Buffer {
+        const int id_{};
+        std::vector<kitty::Image> images_;
+        std::set<int> windows_;
+
+    public:
+        Buffer(nvim::RemoteGraphics& remote, int id, std::string path)
+            : id_{id}
+            , images_{} {
+            images_.emplace_back(Image{remote, get_data(std::move(path))});
+        }
+
+        auto draw(nvim::Api& api, int win_id) -> boost::cobalt::promise<void> {
+            if (!windows_.insert(win_id).second)
+                co_return;
+
+            const auto pos = co_await api.nvim_win_get_position(win_id);
+            std::cout << pos[0] << " " << pos[1] << std::endl;
+            for (auto& im : images_) {
+                im.place(pos.back(), pos.front(), win_id);
+            }
+        }
+
+        auto clear(int win_id) {
+            if (windows_.erase(win_id)) {
+                for (auto& im : images_) {
+                    im.clear(win_id);
+                }
+            }
+        }
+    };
+
+    std::map<int, Buffer> buffers;
+
+    const auto handle_buffers = [&]() -> boost::cobalt::promise<void> {
+        auto gen = api.nvim_create_autocmd(
+            {
+                "BufDelete",
+                "BufEnter",
+                "BufLeave",
+            },
+            {
+                {"pattern", std::vector<nvim::Api::any>{"*.png"}},
+                {"group", augroup},
+            });
+
+        while (gen) {
+            auto msg = co_await gen;
+            const auto data = msg.as_vector().front().as_multimap();
+            const auto event = data.find("event")->second.as_string();
+            const auto id = data.find("buf")->second.as_uint64_t();
+
+            if (event == "BufEnter") {
+                auto it = buffers.find(id);
+                if (it == buffers.end()) {
+                    Buffer b{remote, static_cast<int>(id), data.find("file")->second.as_string()};
+                    it = buffers.emplace(id, std::move(b)).first;
+                }
+
+                const auto win = co_await api.nvim_get_current_win();
+                print_map(win, data);
+                co_await it->second.draw(api, win);
+            } else if (event == "BufLeave") {
+                const auto it = buffers.find(id);
+                if (it != buffers.end()) {
+                    const auto win = co_await api.nvim_get_current_win();
+                    it->second.clear(win);
+                }
+            } else {
+                buffers.erase(id);
+            }
+        }
+    };
+
+    const auto handle_windows = [&]() -> boost::cobalt::promise<void> {
+        auto gen = api.nvim_create_autocmd(
+            {
+                "WinClosed", "WinEnter",
+                // "WinResized",
+                // "WinScrolled",
+            },
+            {
+                {"group", augroup},
+            });
+
+        while (gen) {
+            auto msg = co_await gen;
+            const auto data = msg.as_vector().front().as_multimap();
+            const auto event = data.find("event")->second.as_string();
+            const auto buf = data.find("buf")->second.as_uint64_t();
+
+            auto it = buffers.find(buf);
+            if (it == buffers.end())
+                continue;
+
+            if (event == "WinEnter") {
+                const auto win = co_await api.nvim_get_current_win();
+                print_map(win, data);
+                co_await it->second.draw(api, win);
+            } else if (event == "WinClosed") {
+                const auto win = std::stoi(data.find("file")->second.as_string());
+                it->second.clear(win);
+            }
+        }
+    };
+
+    co_await boost::cobalt::join(handle_buffers(), handle_windows());
+
+    // auto window_events = api.nvim_create_autocmd(
+    //     {
+    //         "WinLeave",
+    //         "WinEnter",
+    //         "WinResized",
+    //         "WinScrolled",
+    //     },
+    //     {
+    //         {"group", augroup},
+    //     });
+    //
+    // while (buffer_events && window_events) {
+    //     const auto res = co_await boost::cobalt::race(buffer_events, window_events);
+    //     const auto& msg = res.index() ? boost::variant2::get<1>(res) : boost::variant2::get<0>(res);
+    //
+    //     const auto data = msg.as_vector().front().as_multimap();
+    //     const auto event = data.find("event")->second.as_string();
+    //
+    //     const auto win = co_await api.nvim_get_current_win();
+    //     std::cout << "win: " << win << ", ";
+    //
+    //     for (const auto& [k, v] : data) {
+    //         std::cout << k.as_string() << "=" << (v.is_string() ? v.as_string() : std::to_string(v.as_uint64_t()))
+    //                   << ", ";
+    //     }
+    //     std::cout << std::endl;
+    //
+    //     if (event.ends_with("Enter")) {
+    //         const auto pos = co_await api.nvim_win_get_position(win);
+    //         std::cout << pos[0] << " " << pos[1] << std::endl;
+    //         im.place(pos.back(), pos.front());
+    //     } else if (event.ends_with("Leave")) {
+    //         im.clear();
+    //     }
+    // }
+    //
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    // for (int i = 0; i < 50; ++i) {
+    //     im.place(i * 2, 10);
+    //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // }
+
+    // const auto size = co_await graphics.screen_size();
+    // std::cout << size.first << " " << size.second << std::endl;
 
     co_return 0;
 
@@ -84,17 +243,6 @@ auto run() -> boost::cobalt::task<int> {
 
     std::cout << co_await api.nvim_get_current_line() << std::endl;
 
-    auto generator = api.nvim_create_autocmd({"BufWritePost", "BufReadPost"},
-                                             {{"pattern", std::vector<nvim::Api::any>{"*.lua", "*.toml"}}});
-    while (generator) {
-        auto msg = co_await generator;
-        const auto buf = msg.as_vector().front().as_multimap();
-        std::cout << "read/write" << std::endl;
-        for (const auto& [k, v] : buf) {
-            std::cout << k.as_string() << "=" << (v.is_string() ? v.as_string() : std::to_string(v.as_uint64_t()))
-                      << std::endl;
-        }
-    }
     //
     //
     //     co_await client.call("nvim_exec2", func, std::map<std::string, std::string>{});

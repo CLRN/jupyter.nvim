@@ -3,6 +3,8 @@
 
 #include <boost/beast/core/detail/base64.hpp>
 
+#include <utility>
+
 namespace kitty {
 
 class Command {
@@ -76,13 +78,27 @@ Image::Image(nvim::RemoteGraphics& nvim, std::string content)
     }
 }
 
+Image::Image(Image&& im)
+    : nvim_{im.nvim_}
+    , png_{std::move(im.png_)}
+    , id_{std::exchange(im.id_, 0)} {}
+
 Image::~Image() {
-    Command c{nvim_, 'a', 'd', 'i', id_};
+    if (id_) {
+        Command c{nvim_, 'a', 'd', 'i', id_, 'q', 2};
+    }
 }
 
-void Image::place(int x, int y) {
+void Image::place(int x, int y, int id) {
     Cursor cursor{nvim_, x, y};
-    Command command{nvim_, 'a', 'p', 'i', id_, 'p', 2, 'q', 2};
+    Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2};
+}
+
+void Image::clear(int id) {
+    Command command{nvim_, 'a', 'd', 'd', 'i', 'i', id_, 'q', 2};
+    if (id) {
+        command.add('p', id * 10000 + id_);
+    }
 }
 
 } // namespace kitty

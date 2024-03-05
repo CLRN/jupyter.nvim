@@ -546,7 +546,10 @@ auto Api::nvim_get_current_tabpage() -> promise<integer> {
 
 auto Api::nvim_get_current_win() -> promise<integer> {
     auto response = co_await rpc_->call("nvim_get_current_win");
-    co_return std::move(response.as_uint64_t());
+    const auto ext = response.as_ext();
+    assert(ext.size() == sizeof(std::uint16_t) + 1);
+    char buf[2] = {ext.data()[2], ext.data()[1]};
+    co_return reinterpret_cast<const std::uint16_t&>(*buf);
 }
 
 auto Api::nvim_get_hl(integer ns_id, table<string, any> opts) -> promise<table<string, any>> {
