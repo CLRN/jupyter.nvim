@@ -67,7 +67,6 @@ Image::Image(nvim::RemoteGraphics& nvim, const std::string& path)
 
     spdlog::debug("[{}] Encoded image to png, size {}", id_, content.size());
 
-
     std::vector<char> encoded(boost::beast::detail::base64::encoded_size(content.size()));
     boost::beast::detail::base64::encode(encoded.data(), content.data(), content.size());
 
@@ -120,13 +119,13 @@ void Image::place(int x, int y, int w, int h, int id) {
     Cursor cursor{nvim_, x, y};
     Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2};
 
-    spdlog::debug("[{}] Placing image with placement id {}", id_, id * 10000 + id_);
+    spdlog::debug("[{}] Placing image with id {}", id_, id * 10000 + id_);
 
     // check if the image is possible to fit, specify rows and cols to downscale if not possible
     if (hpx > win_size_px_h || wpx > win_size_px_w) {
         const int new_h = std::min(h, int(double(w) / ratio));
         const int new_w = std::min(w, int(double(h) * ratio));
-        spdlog::debug("[{}] Rescaling image[{}x{}] to [{}x{}], screen: [{}x{}], window: [{}x{}]", id_, hpx, wpx, new_h,
+        spdlog::debug("[{}] Rescaling image [{}x{}] to [{}x{}], screen: [{}x{}], window: [{}x{}]", id_, hpx, wpx, new_h,
                       new_w, screen_px_h, screen_px_w, h, w);
         command.add('c', new_w, 'r', new_h);
     }
@@ -135,7 +134,7 @@ void Image::place(int x, int y, int w, int h, int id) {
 void Image::clear(int id) {
     Command command{nvim_, 'a', 'd', 'd', 'i', 'i', id_, 'q', 2};
     if (id) {
-        spdlog::debug("[{}] Clearing image with placement id {}", id_, id * 10000 + id_);
+        spdlog::debug("[{}] Clearing image with id {}", id_, id * 10000 + id_);
         command.add('p', id * 10000 + id_);
     }
 }
