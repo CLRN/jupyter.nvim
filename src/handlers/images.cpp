@@ -1,24 +1,25 @@
 #include "handlers/images.hpp"
 #include "kitty.hpp"
 #include "nvim.hpp"
-#include "printer.hpp"
 #include "nvim_graphics.hpp"
+#include "printer.hpp"
 
 #include <boost/cobalt/promise.hpp>
 #include <spdlog/spdlog.h>
 
 namespace jupyter {
+namespace {
 
 class Buffer {
     const int id_{};
-    std::vector<kitty::Image> images_;
+    kitty::Image image_;
     std::set<int> windows_;
 
 public:
     Buffer(nvim::RemoteGraphics& remote, int id, const std::string& path)
         : id_{id}
-        , images_{} {
-        images_.emplace_back(kitty::Image{remote, path});
+        , image_{remote} {
+        image_.load(path);
     }
 
     auto draw(nvim::Api& api) -> boost::cobalt::promise<void> {
@@ -26,24 +27,22 @@ public:
         if (!windows_.insert(win_id).second)
             co_return;
 
-        spdlog::debug("Drawing buffer {} on window {}, images {}", id_, win_id, images_.size());
+        spdlog::debug("Drawing buffer {} on window {}", id_, win_id);
 
         const auto [pos, w, h] = co_await boost::cobalt::join(
             api.nvim_win_get_position(win_id), api.nvim_win_get_width(win_id), api.nvim_win_get_height(win_id));
 
-        for (auto& im : images_) {
-            im.place(pos.back(), pos.front(), w, h, win_id);
-        }
+        image_.place(pos.back(), pos.front(), w, h, win_id);
     }
 
     auto clear(int win_id) {
         if (windows_.erase(win_id)) {
-            for (auto& im : images_) {
-                im.clear(win_id);
-            }
+            image_.clear(win_id);
         }
     }
 };
+
+} // namespace
 
 auto handle_images(nvim::Api& api, nvim::RemoteGraphics& remote, int augroup) -> boost::cobalt::promise<void> {
 
@@ -95,9 +94,8 @@ auto handle_images(nvim::Api& api, nvim::RemoteGraphics& remote, int augroup) ->
     const auto handle_windows = [&]() -> boost::cobalt::promise<void> {
         auto gen = api.nvim_create_autocmd(
             {
-                "WinClosed", "WinEnter",
-                // "WinResized",
-                // "WinScrolled",
+                "WinClosed",
+                "WinEnter",
             },
             {
                 {"group", augroup},

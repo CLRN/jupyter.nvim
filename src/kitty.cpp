@@ -2,10 +2,12 @@
 #include "nvim_graphics.hpp"
 
 #include <boost/beast/core/detail/base64.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
 #include <spdlog/spdlog.h>
 
 #include <cstdint>
+#include <sys/socket.h>
 #include <utility>
 
 namespace kitty {
@@ -51,20 +53,18 @@ Cursor::Cursor(nvim::RemoteGraphics& nvim, int x, int y)
     nvim_.stream() << "\033[" << y << ";" << x << "f"; // move
 }
 
-Image::Image(nvim::RemoteGraphics& nvim, const std::string& path)
+Image::Image(nvim::RemoteGraphics& nvim)
     : nvim_{nvim}
     , image_{} {
     static int id_cnt_{};
     id_ = ++id_cnt_;
+}
 
-    spdlog::debug("[{}] Reading image from {}", id_, path);
-    image_ = cv::imread(path, cv::IMREAD_UNCHANGED);
-
+auto Image::send() {
     spdlog::debug("[{}] Encoding image to png, size {}", id_, image_.total() * image_.elemSize());
 
-    std::vector<uint8_t> content;
+    std::vector<std::uint8_t> content;
     cv::imencode(".png", image_, content, {cv::IMWRITE_PNG_COMPRESSION});
-
     spdlog::debug("[{}] Encoded image to png, size {}", id_, content.size());
 
     std::vector<char> encoded(boost::beast::detail::base64::encoded_size(content.size()));
@@ -92,6 +92,18 @@ Image::Image(nvim::RemoteGraphics& nvim, const std::string& path)
     spdlog::debug("[{}] Sent image to neovim, size {}", id_, encoded.size());
 }
 
+auto Image::load(const std::string& path) -> void {
+    spdlog::debug("[{}] Reading image from {}", id_, path);
+    image_ = cv::imread(path, cv::IMREAD_UNCHANGED);
+    send();
+}
+
+auto Image::load(const std::vector<std::uint8_t>& content) -> void {
+    spdlog::debug("[{}] Reading image content size {}", id_, content.size());
+    image_ = cv::imdecode(content, cv::IMREAD_UNCHANGED);
+    send();
+}
+
 Image::Image(Image&& im)
     : nvim_{im.nvim_}
     , id_{std::exchange(im.id_, 0)}
@@ -104,7 +116,7 @@ Image::~Image() {
     }
 }
 
-void Image::place(int x, int y, int w, int h, int id) {
+auto Image::place(int x, int y, int w, int h, int id) -> void {
     const int hpx = image_.size[0];
     const int wpx = image_.size[1];
     const auto [screen_px_h, screen_px_w] = nvim_.screen_size();
@@ -131,7 +143,7 @@ void Image::place(int x, int y, int w, int h, int id) {
     }
 }
 
-void Image::clear(int id) {
+auto Image::clear(int id) -> void {
     Command command{nvim_, 'a', 'd', 'd', 'i', 'i', id_, 'q', 2};
     if (id) {
         spdlog::debug("[{}] Clearing image with id {}", id_, id * 10000 + id_);

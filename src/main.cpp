@@ -1,6 +1,8 @@
+#include "executor.hpp"
+#include "handlers/images.hpp"
+#include "handlers/markdown.hpp"
 #include "nvim.hpp"
 #include "nvim_graphics.hpp"
-#include "handlers/images.hpp"
 
 #include "spdlog/cfg/env.h"
 #include "spdlog/spdlog.h"
@@ -19,7 +21,8 @@ auto run() -> boost::cobalt::task<int> {
     auto remote = co_await graphics.remote();
 
     const auto augroup = co_await api.nvim_create_augroup("jupyter", {});
-    co_await jupyter::handle_images(api, remote, augroup);
+    co_await boost::cobalt::join(jupyter::handle_images(api, remote, augroup),
+                                 jupyter::handle_markdown(api, remote, augroup));
 
     co_return 0;
 }
@@ -27,8 +30,15 @@ auto run() -> boost::cobalt::task<int> {
 int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
-    boost::asio::io_context ctx{BOOST_ASIO_CONCURRENCY_HINT_1};
+
+    auto& ctx = nvim::ExecutorSingleton::context();
     boost::cobalt::this_thread::set_executor(ctx.get_executor());
-    auto f = boost::cobalt::spawn(ctx, run(), boost::asio::use_future);
-    ctx.run();
+    try {
+        auto f = boost::cobalt::spawn(ctx, run(), boost::asio::use_future);
+        ctx.run();
+        return f.get();
+    } catch (const std::exception& e) {
+        spdlog::error(e.what());
+        return 1;
+    }
 }

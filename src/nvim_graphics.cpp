@@ -1,5 +1,6 @@
 #include "nvim_graphics.hpp"
 #include "nvim.hpp"
+#include "spdlog/spdlog.h"
 
 #include <fcntl.h>
 #include <fmt/core.h>
@@ -19,6 +20,8 @@ auto Graphics::remote() -> boost::cobalt::promise<RemoteGraphics> {
     auto fd = open(tty.c_str(), O_RDONLY | O_NOCTTY);
     ioctl(fd, TIOCGWINSZ, &size);
     close(fd);
+
+    spdlog::info("detected screen size {}x{}, terminal {}x{}", pxsize.first, pxsize.second, size.ws_row, size.ws_col);
 
     co_return RemoteGraphics{std::move(tty), std::move(pxsize), {size.ws_row, size.ws_col}};
 }
