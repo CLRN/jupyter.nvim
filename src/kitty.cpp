@@ -100,7 +100,7 @@ Image::Image(Image&& im)
 Image::~Image() {
     if (id_) {
         spdlog::debug("[{}] Deleted image from neovim", id_);
-        Command c{nvim_, 'a', 'd', 'i', id_, 'q', 2};
+        Command command{nvim_, 'a', 'd', 'd', 'i', 'i', id_, 'q', 2};
     }
 }
 
@@ -116,7 +116,7 @@ void Image::place(int x, int y, int w, int h, int id) {
 
     const auto ratio = double(wpx) / hpx;
 
-    Cursor cursor{nvim_, x, y};
+    Cursor cursor{nvim_, x, y + 1};
     Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2};
 
     spdlog::debug("[{}] Placing image with id {}", id_, id * 10000 + id_);
