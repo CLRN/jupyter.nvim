@@ -41,6 +41,7 @@ public:
 
     auto rpc_channel() const -> int;
     auto next_notification_id() -> int;
+    auto notification(std::uint32_t id) -> promise<any>;
     auto notifications(std::uint32_t id) -> generator<any>;
 
     // Adds a highlight to buffer.

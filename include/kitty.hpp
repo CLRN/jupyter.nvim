@@ -1,5 +1,6 @@
 #pragma once
 
+#include <opencv2/core/mat.hpp>
 #include <string>
 
 namespace nvim {
@@ -21,12 +22,15 @@ public:
 class Image {
     nvim::RemoteGraphics& nvim_;
     int id_{};
+    cv::Mat image_;
 
 public:
-    Image(nvim::RemoteGraphics& nvim, std::string_view content);
+    Image(nvim::RemoteGraphics& nvim, const std::string& path);
     Image(Image&& im);
     ~Image();
 
+    // places the image to a window at col x and y, accepts window width
+    // and height and optional placement id
     void place(int x, int y, int w, int h, int id = 0);
     void clear(int id = 0);
 };

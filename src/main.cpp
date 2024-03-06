@@ -18,18 +18,6 @@
 
 #include <boost/beast/core/detail/base64.hpp>
 
-using kitty::Image;
-
-std::string get_data(const std::string& name) {
-    std::ifstream ifs{name, std::ios::binary};
-    ifs >> std::noskipws;
-
-    assert(ifs.is_open());
-    std::string buf;
-    std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
-    return buf;
-}
-
 auto print_map(int win, const auto& data) {
 
     std::cout << "win: " << win << ", ";
@@ -75,6 +63,7 @@ auto run() -> boost::cobalt::task<int> {
 
     auto api = co_await nvim::Api::create("localhost", 6666);
     auto graphics = nvim::Graphics{api};
+    auto size = co_await graphics.screen_size();
 
     auto remote = co_await graphics.remote();
 
@@ -86,10 +75,10 @@ auto run() -> boost::cobalt::task<int> {
         std::set<int> windows_;
 
     public:
-        Buffer(nvim::RemoteGraphics& remote, int id, std::string path)
+        Buffer(nvim::RemoteGraphics& remote, int id, const std::string& path)
             : id_{id}
             , images_{} {
-            images_.emplace_back(Image{remote, get_data(std::move(path))});
+            images_.emplace_back(kitty::Image{remote, path});
         }
 
         auto draw(nvim::Api& api, int win_id) -> boost::cobalt::promise<void> {
@@ -138,6 +127,9 @@ auto run() -> boost::cobalt::task<int> {
             if (event == "BufEnter") {
                 auto it = buffers.find(id);
                 if (it == buffers.end()) {
+                    // api.nvim_notify("loading image...", 2, {}),
+                    co_await boost::cobalt::join(api.nvim_buf_set_lines(id, 0, -1, false, {""}),
+                                                 api.nvim_buf_set_option(id, "buftype", "nowrite"));
                     Buffer b{remote, static_cast<int>(id), data.find("file")->second.as_string()};
                     it = buffers.emplace(id, std::move(b)).first;
                 }

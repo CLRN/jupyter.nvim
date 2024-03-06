@@ -81,6 +81,7 @@ set(HEADER_FILES
   <msgpack.hpp>
   <fmt/core.h>
   <range/v3/all.hpp>
+  <opencv2/opencv.hpp>
 
   <fstream>
   <iterator>

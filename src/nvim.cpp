@@ -99,6 +99,10 @@ auto Api::next_notification_id() -> int {
     return ++notification_id_cnt_;
 }
 
+auto Api::notification(std::uint32_t id) -> promise<any> {
+    co_return co_await rpc_->notification(id);
+}
+
 auto Api::notifications(std::uint32_t id) -> Api::generator<any> {
     auto gen = rpc_->notifications(id);
     while (gen) {

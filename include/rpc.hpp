@@ -130,6 +130,13 @@ public:
         }
     }
 
+    auto notification(std::uint32_t id) -> boost::cobalt::generator<msgpack::type::variant> {
+        auto& channel = notifications_[id].emplace(128);
+        auto res = co_await channel.read();
+        notifications_.erase(id);
+        co_return res;
+    }
+
     auto notifications(std::uint32_t id) -> boost::cobalt::generator<msgpack::type::variant> {
         auto& channel = notifications_[id].emplace(128);
 

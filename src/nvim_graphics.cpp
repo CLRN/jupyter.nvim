@@ -1,6 +1,7 @@
 #include "nvim_graphics.hpp"
 #include "nvim.hpp"
 
+#include <fcntl.h>
 #include <fmt/core.h>
 
 #include <filesystem>
@@ -12,7 +13,14 @@ Graphics::Graphics(Api& api)
 
 auto Graphics::remote() -> boost::cobalt::promise<RemoteGraphics> {
     auto tty = co_await get_tty(api_);
-    co_return RemoteGraphics{std::move(tty)};
+    auto pxsize = co_await screen_size();
+
+    struct winsize size;
+    auto fd = open(tty.c_str(), O_RDONLY | O_NOCTTY);
+    ioctl(fd, TIOCGWINSZ, &size);
+    close(fd);
+
+    co_return RemoteGraphics{std::move(tty), std::move(pxsize), {size.ws_row, size.ws_col}};
 }
 
 auto Graphics::screen_size(int attempts) -> boost::cobalt::promise<std::pair<int, int>> {
@@ -56,19 +64,23 @@ vim.fn["rpcnotify"]({0}, '{1}', result)
         ofs.write(lua_code.data(), lua_code.size());
     }
 
-    auto gen = api_.notifications(id);
     while (attempts > 0) {
+        auto response = api_.notification(id);
         co_await api_.nvim_exec2(fmt::format("source {}", path), {});
-        const auto res = co_await gen;
+        const auto res = co_await response;
 
-        const auto parts = res.as_vector().front().as_string() | ranges::views::split(';') |
-                           ranges::views::transform([](auto&& rng) {
-                               return std::string_view(&*rng.begin(), ranges::distance(rng));
-                           }) |
-                           ranges::view::drop_exactly(1) | ranges::views::transform([](auto s) {
-                               return std::atoi(s.data());
-                           }) |
-                           ranges::to<std::vector<int>>();
+        // clang-format off
+        const auto parts = 
+            res.as_vector().front().as_string() | 
+            ranges::views::split(';') |
+            ranges::views::transform([](auto&& rng) {
+                return std::string_view(&*rng.begin(), ranges::distance(rng));
+            }) |
+            ranges::view::drop_exactly(1) | 
+            ranges::views::transform([](auto s) { return std::atoi(s.data()); }) |
+            ranges::to<std::vector<int>>();
+        // clang-format on
+
         if (parts.size() == 2)
             co_return {parts.front(), parts.back()};
 
@@ -102,11 +114,20 @@ auto Graphics::get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
     co_return "/dev/" + tty;
 }
 
-RemoteGraphics::RemoteGraphics(std::string tty)
-    : ofs_{std::move(tty), std::ios::binary} {
+RemoteGraphics::RemoteGraphics(std::string tty, std::pair<int, int> screen_size, std::pair<int, int> terminal_size)
+    : ofs_{std::move(tty), std::ios::binary}
+    , screen_size_{screen_size}
+    , terminal_size_{terminal_size} {
     assert(ofs_.is_open());
 }
 
+auto RemoteGraphics::screen_size() const -> std::pair<int, int> {
+    return screen_size_;
+}
+
+auto RemoteGraphics::terminal_size() const -> std::pair<int, int> {
+    return terminal_size_;
+}
 auto RemoteGraphics::stream() -> std::ostream& {
     return ofs_;
 }

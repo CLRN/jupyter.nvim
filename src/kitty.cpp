@@ -2,10 +2,22 @@
 #include "nvim_graphics.hpp"
 
 #include <boost/beast/core/detail/base64.hpp>
+#include <opencv2/opencv.hpp>
 
+#include <cstdint>
 #include <utility>
 
 namespace kitty {
+
+std::string get_data(const std::string& name) {
+    std::ifstream ifs{name, std::ios::binary};
+    ifs >> std::noskipws;
+
+    assert(ifs.is_open());
+    std::string buf;
+    std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
+    return buf;
+}
 
 class Command {
     nvim::RemoteGraphics& nvim_;
@@ -48,8 +60,12 @@ Cursor::Cursor(nvim::RemoteGraphics& nvim, int x, int y)
     nvim_.stream() << "\033[" << y << ";" << x << "f"; // move
 }
 
-Image::Image(nvim::RemoteGraphics& nvim, std::string_view content)
-    : nvim_{nvim} {
+Image::Image(nvim::RemoteGraphics& nvim, const std::string& path)
+    : nvim_{nvim}
+    , image_{cv::imread(path, cv::IMREAD_UNCHANGED)} {
+
+    std::vector<uint8_t> content;
+    cv::imencode(".png", image_, content, {cv::IMWRITE_PNG_COMPRESSION});
 
     static int id_cnt_{};
     id_ = ++id_cnt_;
@@ -79,7 +95,8 @@ Image::Image(nvim::RemoteGraphics& nvim, std::string_view content)
 
 Image::Image(Image&& im)
     : nvim_{im.nvim_}
-    , id_{std::exchange(im.id_, 0)} {}
+    , id_{std::exchange(im.id_, 0)}
+    , image_{std::move(im.image_)} {}
 
 Image::~Image() {
     if (id_) {
@@ -88,8 +105,26 @@ Image::~Image() {
 }
 
 void Image::place(int x, int y, int w, int h, int id) {
+    const int hpx = image_.size[0];
+    const int wpx = image_.size[1];
+    const auto [screen_px_h, screen_px_w] = nvim_.screen_size();
+    const auto [terminal_h, terminal_w] = nvim_.terminal_size();
+    const auto cell_size_h = screen_px_h ? screen_px_h / terminal_h : 1;
+    const auto cell_size_w = screen_px_w ? screen_px_w / terminal_w : 1;
+    const auto win_size_px_h = cell_size_h * h;
+    const auto win_size_px_w = cell_size_w * w;
+
+    const auto ratio = double(wpx) / hpx;
+
     Cursor cursor{nvim_, x, y};
-    Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2, 'c', w, 'r', h};
+    Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2};
+
+    // check if the image is possible to fit, specify rows and cols to downscale if not possible
+    if (hpx > win_size_px_h || wpx > win_size_px_w) {
+        const int new_h = std::min(h, int(double(w) / ratio));
+        const int new_w = std::min(w, int(double(h) * ratio));
+        command.add('c', new_w, 'r', new_h);
+    }
 }
 
 void Image::clear(int id) {
