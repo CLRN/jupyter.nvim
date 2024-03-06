@@ -3,21 +3,12 @@
 
 #include <boost/beast/core/detail/base64.hpp>
 #include <opencv2/opencv.hpp>
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 #include <utility>
 
 namespace kitty {
-
-std::string get_data(const std::string& name) {
-    std::ifstream ifs{name, std::ios::binary};
-    ifs >> std::noskipws;
-
-    assert(ifs.is_open());
-    std::string buf;
-    std::copy(std::istream_iterator<char>(ifs), std::istream_iterator<char>(), std::back_inserter(buf));
-    return buf;
-}
 
 class Command {
     nvim::RemoteGraphics& nvim_;
@@ -62,13 +53,20 @@ Cursor::Cursor(nvim::RemoteGraphics& nvim, int x, int y)
 
 Image::Image(nvim::RemoteGraphics& nvim, const std::string& path)
     : nvim_{nvim}
-    , image_{cv::imread(path, cv::IMREAD_UNCHANGED)} {
+    , image_{} {
+    static int id_cnt_{};
+    id_ = ++id_cnt_;
+
+    spdlog::debug("[{}] Reading image from {}", id_, path);
+    image_ = cv::imread(path, cv::IMREAD_UNCHANGED);
+
+    spdlog::debug("[{}] Encoding image to png, size {}", id_, image_.total() * image_.elemSize());
 
     std::vector<uint8_t> content;
     cv::imencode(".png", image_, content, {cv::IMWRITE_PNG_COMPRESSION});
 
-    static int id_cnt_{};
-    id_ = ++id_cnt_;
+    spdlog::debug("[{}] Encoded image to png, size {}", id_, content.size());
+
 
     std::vector<char> encoded(boost::beast::detail::base64::encoded_size(content.size()));
     boost::beast::detail::base64::encode(encoded.data(), content.data(), content.size());
@@ -91,6 +89,8 @@ Image::Image(nvim::RemoteGraphics& nvim, const std::string& path)
 
         nvim_.stream() << ";" << chunks[i];
     }
+
+    spdlog::debug("[{}] Sent image to neovim, size {}", id_, encoded.size());
 }
 
 Image::Image(Image&& im)
@@ -100,6 +100,7 @@ Image::Image(Image&& im)
 
 Image::~Image() {
     if (id_) {
+        spdlog::debug("[{}] Deleted image from neovim", id_);
         Command c{nvim_, 'a', 'd', 'i', id_, 'q', 2};
     }
 }
@@ -119,10 +120,14 @@ void Image::place(int x, int y, int w, int h, int id) {
     Cursor cursor{nvim_, x, y};
     Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2};
 
+    spdlog::debug("[{}] Placing image with placement id {}", id_, id * 10000 + id_);
+
     // check if the image is possible to fit, specify rows and cols to downscale if not possible
     if (hpx > win_size_px_h || wpx > win_size_px_w) {
         const int new_h = std::min(h, int(double(w) / ratio));
         const int new_w = std::min(w, int(double(h) * ratio));
+        spdlog::debug("[{}] Rescaling image[{}x{}] to [{}x{}], screen: [{}x{}], window: [{}x{}]", id_, hpx, wpx, new_h,
+                      new_w, screen_px_h, screen_px_w, h, w);
         command.add('c', new_w, 'r', new_h);
     }
 }
@@ -130,6 +135,7 @@ void Image::place(int x, int y, int w, int h, int id) {
 void Image::clear(int id) {
     Command command{nvim_, 'a', 'd', 'd', 'i', 'i', id_, 'q', 2};
     if (id) {
+        spdlog::debug("[{}] Clearing image with placement id {}", id_, id * 10000 + id_);
         command.add('p', id * 10000 + id_);
     }
 }

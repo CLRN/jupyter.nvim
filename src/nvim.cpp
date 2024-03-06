@@ -1,12 +1,10 @@
 #include "nvim.hpp"
 #include "rpc.hpp"
 
-#include <filesystem>
 #include <fmt/format.h>
 #include <range/v3/all.hpp>
 
 #include <algorithm>
-#include <fstream>
 #include <memory>
 #include <sstream>
 #include <type_traits>
