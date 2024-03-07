@@ -1,9 +1,9 @@
+#include "executor.hpp"
 #include "handlers/images.hpp"
 #include "kitty.hpp"
 #include "nvim.hpp"
 #include "nvim_graphics.hpp"
 #include "printer.hpp"
-#include "executor.hpp"
 
 #include <boost/cobalt/promise.hpp>
 #include <spdlog/spdlog.h>
@@ -18,6 +18,7 @@ namespace jupyter {
 namespace {
 
 class Image {
+    nvim::Graphics& graphics_;
     const std::string path_;
     const std::string buffer_path_;
     std::size_t line_{};
@@ -42,8 +43,9 @@ class Image {
     }
 
 public:
-    Image(nvim::RemoteGraphics& nvim, const std::string& buffer_path, const std::string& path, std::size_t line)
-        : path_{path}
+    Image(nvim::Graphics& nvim, const std::string& buffer_path, const std::string& path, std::size_t line)
+        : graphics_{nvim}
+        , path_{path}
         , buffer_path_{buffer_path}
         , line_{line}
         , image_{nvim} {}
@@ -52,26 +54,26 @@ public:
         if (path_.starts_with("http")) {
             boost::process::async_pipe ap{nvim::ExecutorSingleton::context()};
 
-            spdlog::info("fetching image {}", path_);
+            spdlog::info("Fetching image {}", path_);
 
             try {
                 boost::process::child process(boost::process::search_path("curl"), path_, "-o", "-",
                                               boost::process::std_out > ap);
                 const auto data = co_await read_all(std::move(ap));
 
-                spdlog::info("got {} bytes for {}", data.size(), path_);
+                spdlog::info("Got {} bytes for {}", data.size(), path_);
 
                 image_.load(data);
             } catch (const std::exception& e) {
-                spdlog::error("failed to load image from {}, error: {}", path_, e.what());
+                spdlog::error("Failed to load image from {}, error: {}", path_, e.what());
             }
         } else {
             image_.load((boost::filesystem::path(buffer_path_).parent_path() / path_).string());
         }
     }
 
-    auto place(int x, int y, int w, int h, int id) -> void {
-        image_.place(x, y + line_ + 1, w, h, id);
+    auto place(int x, int y, int buf, int win_id) -> boost::cobalt::promise<void> {
+        co_await image_.place(x, y + line_ + 1, co_await nvim::Window::get(graphics_, buf, win_id));
     }
 
     auto clear(int id = 0) -> void {
@@ -85,7 +87,7 @@ class Buffer {
     std::set<int> windows_;
 
 public:
-    Buffer(nvim::RemoteGraphics& remote, int id, const std::string& path)
+    Buffer(nvim::Graphics& remote, int id, const std::string& path)
         : id_{id}
         , images_{} {
 
@@ -131,12 +133,8 @@ public:
             co_return;
 
         spdlog::debug("Drawing buffer {} on window {}, images {}", id_, win_id, images_.size());
-
-        const auto [pos, w, h] = co_await boost::cobalt::join(
-            api.nvim_win_get_position(win_id), api.nvim_win_get_width(win_id), api.nvim_win_get_height(win_id));
-
         for (auto& im : images_) {
-            im.place(pos.back(), pos.front(), w, h, win_id);
+            co_await im.place(0, 0, id_, win_id);
         }
     }
 
@@ -151,7 +149,7 @@ public:
 
 } // namespace
 
-auto handle_markdown(nvim::Api& api, nvim::RemoteGraphics& remote, int augroup) -> boost::cobalt::promise<void> {
+auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boost::cobalt::promise<void> {
 
     std::map<int, Buffer> buffers;
 

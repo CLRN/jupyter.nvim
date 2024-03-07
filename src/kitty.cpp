@@ -1,5 +1,6 @@
 #include "kitty.hpp"
 #include "nvim_graphics.hpp"
+#include "window.hpp"
 
 #include <boost/beast/core/detail/base64.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -13,12 +14,12 @@
 namespace kitty {
 
 class Command {
-    nvim::RemoteGraphics& nvim_;
+    nvim::Graphics& nvim_;
     int level_{};
 
 public:
     template <typename... T>
-    Command(nvim::RemoteGraphics& nvim, T... args)
+    Command(nvim::Graphics& nvim, T... args)
         : nvim_{nvim} {
         nvim_.stream() << "\x1b_G";
 
@@ -45,7 +46,7 @@ Cursor::~Cursor() {
     nvim_.stream() << "\0338" << std::flush; // restore pos
 }
 
-Cursor::Cursor(nvim::RemoteGraphics& nvim, int x, int y)
+Cursor::Cursor(nvim::Graphics& nvim, int x, int y)
     : nvim_{nvim}
     , x_{x}
     , y_{y} {
@@ -53,7 +54,7 @@ Cursor::Cursor(nvim::RemoteGraphics& nvim, int x, int y)
     nvim_.stream() << "\033[" << y << ";" << x << "f"; // move
 }
 
-Image::Image(nvim::RemoteGraphics& nvim)
+Image::Image(nvim::Graphics& nvim)
     : nvim_{nvim}
     , image_{} {
     static int id_cnt_{};
@@ -116,31 +117,33 @@ Image::~Image() {
     }
 }
 
-auto Image::place(int x, int y, int w, int h, int id) -> void {
+auto Image::place(int x, int y, const nvim::Window& win) -> boost::cobalt::promise<void> {
     const int hpx = image_.size[0];
     const int wpx = image_.size[1];
-    const auto [screen_px_h, screen_px_w] = nvim_.screen_size();
-    const auto [terminal_h, terminal_w] = nvim_.terminal_size();
-    const auto cell_size_h = screen_px_h ? screen_px_h / terminal_h : 1;
-    const auto cell_size_w = screen_px_w ? screen_px_w / terminal_w : 1;
+    const auto [cell_size_h, cell_size_w] = nvim_.cell_size();
+    const auto [h, w] = win.size();
     const auto win_size_px_h = cell_size_h * h;
     const auto win_size_px_w = cell_size_w * w;
 
     const auto ratio = double(wpx) / hpx;
 
-    Cursor cursor{nvim_, x, y + 1};
-    Command command{nvim_, 'a', 'p', 'i', id_, 'p', id * 10000 + id_, 'q', 2};
+    x += win.position().second;
+    y += win.position().first;
 
-    spdlog::debug("[{}] Placing image with id {}", id_, id * 10000 + id_);
+    Cursor cursor{nvim_, x, y};
+    Command command{nvim_, 'a', 'p', 'i', id_, 'p', win.id() * 10000 + id_, 'q', 2};
+
+    spdlog::debug("[{}] Placing image with id {} to {}:{}", id_, win.id() * 10000 + id_, y, x);
 
     // check if the image is possible to fit, specify rows and cols to downscale if not possible
     if (hpx > win_size_px_h || wpx > win_size_px_w) {
         const int new_h = std::min(h, int(double(w) / ratio));
         const int new_w = std::min(w, int(double(h) * ratio));
-        spdlog::debug("[{}] Rescaling image [{}x{}] to [{}x{}], screen: [{}x{}], window: [{}x{}]", id_, hpx, wpx, new_h,
-                      new_w, screen_px_h, screen_px_w, h, w);
+        spdlog::debug("[{}] Rescaling image [{}x{}] to [{}x{}], window: [{}x{}]", id_, hpx, wpx, new_h, new_w, h, w);
         command.add('c', new_w, 'r', new_h);
     }
+
+    co_return;
 }
 
 auto Image::clear(int id) -> void {

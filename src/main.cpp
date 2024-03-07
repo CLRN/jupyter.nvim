@@ -13,16 +13,12 @@ auto run() -> boost::cobalt::task<int> {
     spdlog::debug("starting");
 
     auto api = co_await nvim::Api::create("localhost", 6666);
-    const auto output = co_await api.nvim_exec2("lua print(vim.fn['getpid']())", {{"output", true}});
-    const int pid = std::atoi(output.find("output")->second.as_string().c_str());
-
     auto graphics = nvim::Graphics{api};
-    auto size = co_await graphics.screen_size();
-    auto remote = co_await graphics.remote();
+    co_await graphics.init();
 
     const auto augroup = co_await api.nvim_create_augroup("jupyter", {});
-    co_await boost::cobalt::join(jupyter::handle_images(api, remote, augroup),
-                                 jupyter::handle_markdown(api, remote, augroup));
+    co_await boost::cobalt::join(jupyter::handle_images(api, graphics, augroup),
+                                 jupyter::handle_markdown(api, graphics, augroup));
 
     co_return 0;
 }

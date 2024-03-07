@@ -5,6 +5,6 @@
 
 namespace jupyter {
 
-auto handle_markdown(nvim::Api& api, nvim::RemoteGraphics& remote, int augroup) -> boost::cobalt::promise<void>;
+auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boost::cobalt::promise<void>;
 
 } // namespace jupyter

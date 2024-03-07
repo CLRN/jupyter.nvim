@@ -3,6 +3,7 @@
 #include "nvim.hpp"
 #include "nvim_graphics.hpp"
 #include "printer.hpp"
+#include "window.hpp"
 
 #include <boost/cobalt/promise.hpp>
 #include <spdlog/spdlog.h>
@@ -12,27 +13,24 @@ namespace {
 
 class Buffer {
     const int id_{};
+    nvim::Graphics& graphics_;
     kitty::Image image_;
     std::set<int> windows_;
 
 public:
-    Buffer(nvim::RemoteGraphics& remote, int id, const std::string& path)
+    Buffer(nvim::Graphics& graphics, int id, const std::string& path)
         : id_{id}
-        , image_{remote} {
+        , graphics_{graphics}
+        , image_{graphics} {
         image_.load(path);
     }
 
-    auto draw(nvim::Api& api) -> boost::cobalt::promise<void> {
-        const auto win_id = co_await api.nvim_get_current_win();
+    auto draw(nvim::Api& api, int win_id) -> boost::cobalt::promise<void> {
         if (!windows_.insert(win_id).second)
             co_return;
 
         spdlog::debug("Drawing buffer {} on window {}", id_, win_id);
-
-        const auto [pos, w, h] = co_await boost::cobalt::join(
-            api.nvim_win_get_position(win_id), api.nvim_win_get_width(win_id), api.nvim_win_get_height(win_id));
-
-        image_.place(pos.back(), pos.front(), w, h, win_id);
+        co_await image_.place(0, 0, co_await nvim::Window::get(graphics_, id_, win_id));
     }
 
     auto clear(int win_id) {
@@ -44,7 +42,7 @@ public:
 
 } // namespace
 
-auto handle_images(nvim::Api& api, nvim::RemoteGraphics& remote, int augroup) -> boost::cobalt::promise<void> {
+auto handle_images(nvim::Api& api, nvim::Graphics& graphics, int augroup) -> boost::cobalt::promise<void> {
 
     std::map<int, Buffer> buffers;
 
@@ -65,19 +63,24 @@ auto handle_images(nvim::Api& api, nvim::RemoteGraphics& remote, int augroup) ->
             const auto data = msg.as_vector().front().as_multimap();
             const auto event = data.find("event")->second.as_string();
             const auto id = data.find("buf")->second.as_uint64_t();
+            const auto win_id = co_await api.nvim_get_current_win();
 
             if (event == "BufEnter") {
                 auto it = buffers.find(id);
                 if (it == buffers.end()) {
-                    spdlog::debug("New Buffer event {}", msg);
+                    spdlog::debug("New Buffer {}, window: {}", msg, win_id);
+
+                    const auto window = co_await nvim::Window::get(graphics, id, win_id);
+
                     // api.nvim_notify("loading image...", 2, {}),
+                    //
                     co_await boost::cobalt::join(api.nvim_buf_set_lines(id, 0, -1, false, {""}),
                                                  api.nvim_buf_set_option(id, "buftype", "nowrite"));
-                    Buffer b{remote, static_cast<int>(id), data.find("file")->second.as_string()};
+                    Buffer b{graphics, static_cast<int>(id), data.find("file")->second.as_string()};
                     it = buffers.emplace(id, std::move(b)).first;
                 }
 
-                co_await it->second.draw(api);
+                co_await it->second.draw(api, win_id);
             } else if (event == "BufLeave") {
                 const auto it = buffers.find(id);
                 if (it != buffers.end()) {
@@ -112,8 +115,9 @@ auto handle_images(nvim::Api& api, nvim::RemoteGraphics& remote, int augroup) ->
                 continue;
 
             if (event == "WinEnter") {
-                spdlog::debug("Entered window {}", msg);
-                co_await it->second.draw(api);
+                const auto win_id = co_await api.nvim_get_current_win();
+                spdlog::debug("Entered window {}, id: {}", msg, win_id);
+                co_await it->second.draw(api, win_id);
             } else if (event == "WinClosed") {
                 const auto win = std::stoi(data.find("file")->second.as_string());
                 spdlog::debug("Closed window {}, data {}", win, msg);

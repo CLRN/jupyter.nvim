@@ -105,6 +105,7 @@ target_include_directories(test PUBLIC
 )
 target_sources(test PRIVATE 
   src/main.cpp
+  src/window.cpp
   src/handlers/images.cpp
   src/handlers/markdown.cpp
 )

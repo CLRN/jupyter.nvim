@@ -9,24 +9,39 @@
 
 namespace nvim {
 
-Graphics::Graphics(Api& api)
-    : api_{api} {}
+Graphics::Graphics(Api& api, int attempts)
+    : api_{api}
+    , retry_count_{attempts} {}
 
-auto Graphics::remote() -> boost::cobalt::promise<RemoteGraphics> {
-    auto tty = co_await get_tty(api_);
-    auto pxsize = co_await screen_size();
+auto Graphics::api() -> Api& {
+    return api_;
+}
 
+auto Graphics::init() -> boost::cobalt::promise<void> {
+    tty_ = co_await get_tty(api_);
+    ofs_.open(tty_, std::ios::binary);
+    co_await update();
+}
+
+auto Graphics::update() -> boost::cobalt::promise<void> {
     struct winsize size;
-    auto fd = open(tty.c_str(), O_RDONLY | O_NOCTTY);
+
+    auto fd = open(tty_.c_str(), O_RDONLY | O_NOCTTY);
     ioctl(fd, TIOCGWINSZ, &size);
     close(fd);
 
-    spdlog::info("detected screen size {}x{}, terminal {}x{}", pxsize.first, pxsize.second, size.ws_row, size.ws_col);
+    screen_size_ = decltype(screen_size_){};
 
-    co_return RemoteGraphics{std::move(tty), std::move(pxsize), {size.ws_row, size.ws_col}};
+    auto pxsize = co_await screen_size();
+    spdlog::info("Detected screen size {}x{}, terminal {}x{}", pxsize.first, pxsize.second, size.ws_row, size.ws_col);
+    terminal_size_ = {size.ws_row, size.ws_col};
+
+    const auto [screen_px_h, screen_px_w] = pxsize;
+    const auto [terminal_h, terminal_w] = terminal_size_;
+    cell_size_ = std::make_pair(screen_px_h ? screen_px_h / terminal_h : 1, screen_px_w ? screen_px_w / terminal_w : 1);
 }
 
-auto Graphics::screen_size(int attempts) -> boost::cobalt::promise<std::pair<int, int>> {
+auto Graphics::run_lua_io(const std::string_view data) -> boost::cobalt::promise<std::string> {
     const int id = api_.next_notification_id();
     const std::string lua_code = fmt::format(R"(
 local uv = require("luv")
@@ -48,16 +63,16 @@ stdin:read_start(function(err, data)
   close()
 end)
 
-stdout:write("\x1b[14t")
+stdout:write("\x1b{2}")
 stdout:close()
 uv.run()
 vim.fn["rpcnotify"]({0}, '{1}', result)
+
     )",
 
-                                             api_.rpc_channel(), id);
+                                             api_.rpc_channel(), id, data);
 
     const std::string path = fmt::format("/tmp/nvim-cpp.{}.lua", id);
-
     std::shared_ptr<void> dummy{nullptr, [&path](auto) {
                                     std::filesystem::remove(path);
                                 }};
@@ -67,14 +82,20 @@ vim.fn["rpcnotify"]({0}, '{1}', result)
         ofs.write(lua_code.data(), lua_code.size());
     }
 
-    while (attempts > 0) {
-        auto response = api_.notification(id);
-        co_await api_.nvim_exec2(fmt::format("source {}", path), {});
-        const auto res = co_await response;
+    auto response = api_.notification(id);
+    co_await api_.nvim_exec2(fmt::format("source {}", path), {});
+    const auto res = co_await response;
+    co_return res.as_vector().front().as_string();
+}
+
+auto Graphics::screen_size() -> boost::cobalt::promise<std::pair<int, int>> {
+    int attempts = retry_count_;
+    while (attempts && !screen_size_.first && !screen_size_.second) {
+        const auto data = co_await run_lua_io("[14t");
 
         // clang-format off
         const auto parts = 
-            res.as_vector().front().as_string() | 
+            data | 
             ranges::views::split(';') |
             ranges::views::transform([](auto&& rng) {
                 return std::string_view(&*rng.begin(), ranges::distance(rng));
@@ -84,12 +105,25 @@ vim.fn["rpcnotify"]({0}, '{1}', result)
             ranges::to<std::vector<int>>();
         // clang-format on
 
-        if (parts.size() == 2)
-            co_return {parts.front(), parts.back()};
+        if (parts.size() == 2) {
+            screen_size_ = {parts.front(), parts.back()};
+        }
 
         --attempts;
     }
-    co_return {};
+    co_return screen_size_;
+}
+
+auto Graphics::stream() -> std::ostream& {
+    return ofs_;
+}
+
+auto Graphics::terminal_size() -> std::pair<int, int> {
+    return terminal_size_;
+}
+
+auto Graphics::cell_size() -> std::pair<double, double> {
+    return cell_size_;
 }
 
 auto Graphics::get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
@@ -117,22 +151,36 @@ auto Graphics::get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
     co_return "/dev/" + tty;
 }
 
-RemoteGraphics::RemoteGraphics(std::string tty, std::pair<int, int> screen_size, std::pair<int, int> terminal_size)
-    : ofs_{std::move(tty), std::ios::binary}
-    , screen_size_{screen_size}
-    , terminal_size_{terminal_size} {
-    assert(ofs_.is_open());
-}
+auto Graphics::position(int win_id) -> boost::cobalt::promise<std::pair<int, int>> {
+    const auto cursor = co_await api_.nvim_win_get_cursor(win_id);
+    co_await api_.nvim_win_set_cursor(win_id, {1, 0});
 
-auto RemoteGraphics::screen_size() const -> std::pair<int, int> {
-    return screen_size_;
-}
+    int attempts = retry_count_;
+    while (attempts) {
+        const auto data = co_await run_lua_io("[6n");
 
-auto RemoteGraphics::terminal_size() const -> std::pair<int, int> {
-    return terminal_size_;
-}
-auto RemoteGraphics::stream() -> std::ostream& {
-    return ofs_;
+        if (!data.empty()) {
+            // clang-format off
+            const auto parts = 
+                data | 
+                ranges::views::drop_while([](const auto c){ return c != '['; }) |
+                ranges::views::drop_exactly(1) |
+                ranges::views::drop_last(1) |
+                ranges::views::split(';') |
+                ranges::views::transform([](auto s) { return std::atoi(&*s.begin()); }) |
+                ranges::to<std::vector<int>>();
+            // clang-format on
+
+            if (parts.size() >= 2) {
+                co_await api_.nvim_win_set_cursor(win_id, cursor);
+                co_return {parts.front(), parts.back()};
+            }
+        }
+
+        --attempts;
+    }
+
+    co_return {};
 }
 
 } // namespace nvim

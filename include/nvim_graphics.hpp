@@ -8,29 +8,37 @@
 namespace nvim {
 class Api;
 
-class RemoteGraphics {
+class Graphics {
+    Api& api_;
+    const int retry_count_{};
+
+    std::string tty_;
     std::ofstream ofs_;
     std::pair<int, int> screen_size_{};
     std::pair<int, int> terminal_size_{};
+    std::pair<double, double> cell_size_{};
+
+    auto run_lua_io(std::string_view data) -> boost::cobalt::promise<std::string>;
 
 public:
-    RemoteGraphics(std::string tty, std::pair<int, int> screen_size, std::pair<int, int> terminal_size);
-    auto stream() -> std::ostream&;
-    auto screen_size() const -> std::pair<int, int>;
-    auto terminal_size() const -> std::pair<int, int>;
-};
+    Graphics(Api& api, int retry_count = 5);
 
-class Graphics {
-    Api& api_;
+    auto api() -> Api&;
 
-public:
-    Graphics(Api& api);
+    auto init() -> boost::cobalt::promise<void>;
+    auto update() -> boost::cobalt::promise<void>;
 
     // returns height and width
-    auto screen_size(int attempts = 5) -> boost::cobalt::promise<std::pair<int, int>>;
+    auto screen_size() -> boost::cobalt::promise<std::pair<int, int>>;
+    auto terminal_size() -> std::pair<int, int>;
+    auto cell_size() -> std::pair<double, double>;
+
+    // returns row and col
+    auto position(int win_id) -> boost::cobalt::promise<std::pair<int, int>>;
 
     auto get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string>;
-    auto remote() -> boost::cobalt::promise<RemoteGraphics>;
+
+    auto stream() -> std::ostream&;
 };
 
 } // namespace nvim
