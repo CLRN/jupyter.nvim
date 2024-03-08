@@ -1,4 +1,5 @@
 #include "nvim_graphics.hpp"
+#include "geometry.hpp"
 #include "nvim.hpp"
 #include "spdlog/spdlog.h"
 
@@ -33,12 +34,13 @@ auto Graphics::update() -> boost::cobalt::promise<void> {
     screen_size_ = decltype(screen_size_){};
 
     auto pxsize = co_await screen_size();
-    spdlog::info("Detected screen size {}x{}, terminal {}x{}", pxsize.first, pxsize.second, size.ws_row, size.ws_col);
-    terminal_size_ = {size.ws_row, size.ws_col};
+    terminal_size_ = Size{.w = size.ws_col, .h = size.ws_row};
 
     const auto [screen_px_h, screen_px_w] = pxsize;
     const auto [terminal_h, terminal_w] = terminal_size_;
-    cell_size_ = std::make_pair(screen_px_h ? screen_px_h / terminal_h : 1, screen_px_w ? screen_px_w / terminal_w : 1);
+    cell_size_ = Size{.w = screen_px_w ? screen_px_w / terminal_w : 1, .h = screen_px_h ? screen_px_h / terminal_h : 1};
+
+    spdlog::info("Detected sizes, screen: {}, terminal: {}, cell: {}", pxsize, terminal_size_, cell_size_);
 }
 
 auto Graphics::run_lua_io(const std::string_view data) -> boost::cobalt::promise<std::string> {
@@ -88,9 +90,9 @@ vim.fn["rpcnotify"]({0}, '{1}', result)
     co_return res.as_vector().front().as_string();
 }
 
-auto Graphics::screen_size() -> boost::cobalt::promise<std::pair<int, int>> {
+auto Graphics::screen_size() -> boost::cobalt::promise<Size> {
     int attempts = retry_count_;
-    while (attempts && !screen_size_.first && !screen_size_.second) {
+    while (attempts && !screen_size_.w && !screen_size_.h) {
         const auto data = co_await run_lua_io("[14t");
 
         // clang-format off
@@ -106,7 +108,7 @@ auto Graphics::screen_size() -> boost::cobalt::promise<std::pair<int, int>> {
         // clang-format on
 
         if (parts.size() == 2) {
-            screen_size_ = {parts.front(), parts.back()};
+            screen_size_ = Size{.w = parts.back(), .h = parts.front()};
         }
 
         --attempts;
@@ -118,11 +120,11 @@ auto Graphics::stream() -> std::ostream& {
     return ofs_;
 }
 
-auto Graphics::terminal_size() -> std::pair<int, int> {
+auto Graphics::terminal_size() -> Size {
     return terminal_size_;
 }
 
-auto Graphics::cell_size() -> std::pair<double, double> {
+auto Graphics::cell_size() -> Size {
     return cell_size_;
 }
 
@@ -151,7 +153,7 @@ auto Graphics::get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
     co_return "/dev/" + tty;
 }
 
-auto Graphics::position(int win_id) -> boost::cobalt::promise<std::pair<int, int>> {
+auto Graphics::position(int win_id) -> boost::cobalt::promise<Point> {
     const auto cursor = co_await api_.nvim_win_get_cursor(win_id);
     co_await api_.nvim_win_set_cursor(win_id, {1, 0});
 
@@ -173,7 +175,7 @@ auto Graphics::position(int win_id) -> boost::cobalt::promise<std::pair<int, int
 
             if (parts.size() >= 2) {
                 co_await api_.nvim_win_set_cursor(win_id, cursor);
-                co_return {parts.front(), parts.back()};
+                co_return Point{.x = parts.back(), .y = parts.front()};
             }
         }
 

@@ -57,7 +57,7 @@ public:
             spdlog::info("Fetching image {}", path_);
 
             try {
-                boost::process::child process(boost::process::search_path("curl"), path_, "-o", "-",
+                boost::process::child process(boost::process::search_path("curl"), path_, "-o", "-", "-s",
                                               boost::process::std_out > ap);
                 const auto data = co_await read_all(std::move(ap));
 
@@ -73,7 +73,8 @@ public:
     }
 
     auto place(int x, int y, int buf, int win_id) -> boost::cobalt::promise<void> {
-        co_await image_.place(x, y + line_ + 1, co_await nvim::Window::get(graphics_, buf, win_id));
+        co_await image_.place(nvim::Point{.x = x, .y = static_cast<int>(y + line_ + 1)},
+                              co_await nvim::Window::get(graphics_, win_id));
     }
 
     auto clear(int id = 0) -> void {

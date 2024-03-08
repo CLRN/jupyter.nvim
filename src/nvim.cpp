@@ -925,11 +925,12 @@ auto Api::nvim_win_get_option(integer window, string name) -> promise<any> {
     co_return co_await rpc_->call("nvim_win_get_option", window, name);
 }
 
-auto Api::nvim_win_get_position(integer window) -> promise<std::vector<integer>> {
+auto Api::nvim_win_get_position(integer window) -> promise<Point> {
     auto response = co_await rpc_->call("nvim_win_get_position", window);
-    co_return transform(response.as_vector(), [](auto t) -> integer {
+    const auto vec = transform(response.as_vector(), [](auto t) -> integer {
         return t.as_uint64_t();
     });
+    co_return Point{.x = vec.back(), .y = vec.front()};
 }
 
 auto Api::nvim_win_get_tabpage(integer window) -> promise<integer> {

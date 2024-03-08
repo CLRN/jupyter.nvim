@@ -1,5 +1,7 @@
 #pragma once
 
+#include "geometry.hpp"
+
 #include <boost/cobalt/promise.hpp>
 #include <msgpack.hpp>
 
@@ -1997,8 +1999,8 @@ public:
     // Gets the window position in display cells. First position is zero.
     //
     // @param window integer Window handle, or 0 for current window
-    // @return std::vector<integer>
-    auto nvim_win_get_position(integer window) -> promise<std::vector<integer>>;
+    // @return Point
+    auto nvim_win_get_position(integer window) -> promise<Point>;
 
     // Gets the window tabpage
     //

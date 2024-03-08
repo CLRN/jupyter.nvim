@@ -117,30 +117,28 @@ Image::~Image() {
     }
 }
 
-auto Image::place(int x, int y, const nvim::Window& win) -> boost::cobalt::promise<void> {
-    const int hpx = image_.size[0];
-    const int wpx = image_.size[1];
-    const auto [cell_size_h, cell_size_w] = nvim_.cell_size();
-    const auto [h, w] = win.size();
-    const auto win_size_px_h = cell_size_h * h;
-    const auto win_size_px_w = cell_size_w * w;
+auto Image::place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::promise<void> {
+    const auto img_size = nvim::Size{.w = image_.size[1], .h = image_.size[0]};
+    const auto cell_size = nvim_.cell_size();
+    const auto win_size = win.size();
+    const auto win_size_px = nvim::Size{.w = cell_size.w * win_size.w, .h = cell_size.h * win_size.h};
 
-    const auto ratio = double(wpx) / hpx;
+    const auto ratio = double(img_size.w) / img_size.h;
 
-    x += win.position().second;
-    y += win.position().first;
+    where.x += win.position().x;
+    where.y += win.position().y;
 
-    Cursor cursor{nvim_, x, y};
+    spdlog::debug("[{}] Placing image with id {} to {}", id_, win.id() * 10000 + id_, where);
+
+    Cursor cursor{nvim_, where.x, where.y};
     Command command{nvim_, 'a', 'p', 'i', id_, 'p', win.id() * 10000 + id_, 'q', 2};
 
-    spdlog::debug("[{}] Placing image with id {} to {}:{}", id_, win.id() * 10000 + id_, y, x);
-
     // check if the image is possible to fit, specify rows and cols to downscale if not possible
-    if (hpx > win_size_px_h || wpx > win_size_px_w) {
-        const int new_h = std::min(h, int(double(w) / ratio));
-        const int new_w = std::min(w, int(double(h) * ratio));
-        spdlog::debug("[{}] Rescaling image [{}x{}] to [{}x{}], window: [{}x{}]", id_, hpx, wpx, new_h, new_w, h, w);
-        command.add('c', new_w, 'r', new_h);
+    if (img_size.h > win_size_px.h || img_size.w > win_size_px.w) {
+        const auto new_size = nvim::Size{.w = std::min(win_size.w, int(double(win_size.h) * ratio)),
+                                         .h = std::min(win_size.h, int(double(win_size.w) / ratio))};
+        spdlog::debug("[{}] Rescaling image {} to {}, window: {}", id_, img_size, new_size, win_size);
+        command.add('c', new_size.w, 'r', new_size.h);
     }
 
     co_return;

@@ -1,4 +1,5 @@
 #include "handlers/images.hpp"
+#include "geometry.hpp"
 #include "kitty.hpp"
 #include "nvim.hpp"
 #include "nvim_graphics.hpp"
@@ -30,7 +31,7 @@ public:
             co_return;
 
         spdlog::debug("Drawing buffer {} on window {}", id_, win_id);
-        co_await image_.place(0, 0, co_await nvim::Window::get(graphics_, id_, win_id));
+        co_await image_.place(nvim::Point{}, co_await nvim::Window::get(graphics_, win_id));
     }
 
     auto clear(int win_id) {
@@ -70,7 +71,7 @@ auto handle_images(nvim::Api& api, nvim::Graphics& graphics, int augroup) -> boo
                 if (it == buffers.end()) {
                     spdlog::debug("New Buffer {}, window: {}", msg, win_id);
 
-                    const auto window = co_await nvim::Window::get(graphics, id, win_id);
+                    const auto window = co_await nvim::Window::get(graphics, win_id);
 
                     // api.nvim_notify("loading image...", 2, {}),
                     //

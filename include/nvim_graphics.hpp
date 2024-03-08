@@ -1,9 +1,10 @@
 #pragma once
 
+#include "geometry.hpp"
+
 #include <boost/cobalt/promise.hpp>
 
 #include <string>
-#include <utility>
 
 namespace nvim {
 class Api;
@@ -14,9 +15,9 @@ class Graphics {
 
     std::string tty_;
     std::ofstream ofs_;
-    std::pair<int, int> screen_size_{};
-    std::pair<int, int> terminal_size_{};
-    std::pair<double, double> cell_size_{};
+    Size screen_size_{};
+    Size terminal_size_{};
+    Size cell_size_{};
 
     auto run_lua_io(std::string_view data) -> boost::cobalt::promise<std::string>;
 
@@ -29,12 +30,12 @@ public:
     auto update() -> boost::cobalt::promise<void>;
 
     // returns height and width
-    auto screen_size() -> boost::cobalt::promise<std::pair<int, int>>;
-    auto terminal_size() -> std::pair<int, int>;
-    auto cell_size() -> std::pair<double, double>;
+    auto screen_size() -> boost::cobalt::promise<Size>;
+    auto terminal_size() -> Size;
+    auto cell_size() -> Size;
 
     // returns row and col
-    auto position(int win_id) -> boost::cobalt::promise<std::pair<int, int>>;
+    auto position(int win_id) -> boost::cobalt::promise<Point>;
 
     auto get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string>;
 

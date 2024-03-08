@@ -38,7 +38,7 @@ public:
     auto load(const std::vector<std::uint8_t>& data) -> void;
 
     // places the image to a window at col x and y, accepts optional placement(window) id
-    auto place(int x, int y, const nvim::Window& win) -> boost::cobalt::promise<void>;
+    auto place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::promise<void>;
     auto clear(int id = 0) -> void;
 };
 } // namespace kitty
