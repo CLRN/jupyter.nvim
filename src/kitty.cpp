@@ -117,7 +117,7 @@ Image::~Image() {
     }
 }
 
-auto Image::place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::promise<void> {
+auto Image::place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::promise<nvim::Size> {
     const auto img_size = nvim::Size{.w = image_.size[1], .h = image_.size[0]};
     const auto cell_size = nvim_.cell_size();
     const auto win_size = win.size();
@@ -128,20 +128,19 @@ auto Image::place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::
     where.x += win.position().x;
     where.y += win.position().y;
 
-    spdlog::debug("[{}] Placing image with id {} to {}", id_, win.id() * 10000 + id_, where);
+    const auto placement_size = (img_size.h > win_size_px.h || img_size.w > win_size_px.w)
+                                    ? nvim::Size{.w = std::min(win_size.w, int(double(win_size.h) * ratio)),
+                                                 .h = std::min(win_size.h, int(double(win_size.w) / ratio))}
+                                    : nvim::Size{.w = img_size.w / cell_size.w, .h = img_size.h / cell_size.h};
+
+    spdlog::debug("[{}] Placing image with id {} to {} with size: {}", id_, win.id() * 10000 + id_, where,
+                  placement_size);
 
     Cursor cursor{nvim_, where.x, where.y};
-    Command command{nvim_, 'a', 'p', 'i', id_, 'p', win.id() * 10000 + id_, 'q', 2};
+    Command command{
+        nvim_, 'a', 'p', 'i', id_, 'p', win.id() * 10000 + id_, 'q', 2, 'c', placement_size.w, 'r', placement_size.h};
 
-    // check if the image is possible to fit, specify rows and cols to downscale if not possible
-    if (img_size.h > win_size_px.h || img_size.w > win_size_px.w) {
-        const auto new_size = nvim::Size{.w = std::min(win_size.w, int(double(win_size.h) * ratio)),
-                                         .h = std::min(win_size.h, int(double(win_size.w) / ratio))};
-        spdlog::debug("[{}] Rescaling image {} to {}, window: {}", id_, img_size, new_size, win_size);
-        command.add('c', new_size.w, 'r', new_size.h);
-    }
-
-    co_return;
+    co_return placement_size;
 }
 
 auto Image::clear(int id) -> void {

@@ -3,6 +3,7 @@
 #include <boost/asio.hpp>
 #include <boost/cobalt.hpp>
 #include <msgpack.hpp>
+#include <spdlog/spdlog.h>
 
 #include <cassert>
 #include <cstdint>
@@ -165,8 +166,10 @@ private:
                         co_await it->second->write(message[3]);
                     } else {
                         // errors are returned as array of two elements, where the message is in the end
-                        co_await it->second->write(
-                            std::make_exception_ptr(std::runtime_error(message[2].as_vector().back().as_string())));
+                        auto err = message[2].as_vector().back().as_string();
+                        spdlog::error("RPC call returned error: {}", err);
+
+                        co_await it->second->write(std::make_exception_ptr(std::runtime_error(std::move(err))));
                     }
                 }
             } else if (mt == MessageType::Notify) {

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "geometry.hpp"
 #include "window.hpp"
+
 #include <cstdint>
 #include <string>
 
@@ -38,7 +40,7 @@ public:
     auto load(const std::vector<std::uint8_t>& data) -> void;
 
     // places the image to a window at col x and y, accepts optional placement(window) id
-    auto place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::promise<void>;
+    auto place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::promise<nvim::Size>;
     auto clear(int id = 0) -> void;
 };
 } // namespace kitty

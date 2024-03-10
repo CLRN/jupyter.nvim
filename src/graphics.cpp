@@ -1,6 +1,6 @@
 #include "graphics.hpp"
-#include "geometry.hpp"
 #include "api.hpp"
+#include "geometry.hpp"
 #include "spdlog/spdlog.h"
 
 #include <fcntl.h>
@@ -36,9 +36,8 @@ auto Graphics::update() -> boost::cobalt::promise<void> {
     auto pxsize = co_await screen_size();
     terminal_size_ = Size{.w = size.ws_col, .h = size.ws_row};
 
-    const auto [screen_px_h, screen_px_w] = pxsize;
-    const auto [terminal_h, terminal_w] = terminal_size_;
-    cell_size_ = Size{.w = screen_px_w ? screen_px_w / terminal_w : 1, .h = screen_px_h ? screen_px_h / terminal_h : 1};
+    cell_size_ = Size{.w = screen_size_.w ? screen_size_.w / terminal_size_.w : 1,
+                      .h = screen_size_.h ? screen_size_.h / terminal_size_.h : 1};
 
     spdlog::info("Detected sizes, screen: {}, terminal: {}, cell: {}", pxsize, terminal_size_, cell_size_);
 }

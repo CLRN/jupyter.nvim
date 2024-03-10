@@ -1,6 +1,6 @@
 #include "window.hpp"
-#include "geometry.hpp"
 #include "api.hpp"
+#include "geometry.hpp"
 #include "graphics.hpp"
 
 #include <spdlog/spdlog.h>
@@ -21,19 +21,19 @@ auto Window::get(Graphics& api, int win) -> boost::cobalt::promise<Window> {
         const auto [terminal_pos, nvim_pos, w, h] =
             co_await boost::cobalt::join(api.position(win), api.api().nvim_win_get_position(win),
                                          api.api().nvim_win_get_width(win), api.api().nvim_win_get_height(win));
-        auto size = Size{.w = terminal_pos.x - nvim_pos.x, .h = terminal_pos.y - nvim_pos.y};
+        auto offsets = Size{.w = terminal_pos.x - nvim_pos.x, .h = terminal_pos.y - nvim_pos.y};
         it = cache_
                  .emplace(win,
                           Window{
                               win,
                               terminal_pos,
-                              size,
+                              offsets,
                               Size{.w = w, .h = h},
                           })
                  .first;
 
-        spdlog::info("Detected window {}, terminal position: {}, nvim position: {}, size: {}", win, terminal_pos,
-                     nvim_pos, size);
+        spdlog::info("Detected window {}, terminal position: {}, nvim window offsets: {}, window area offsets: {}, size: {}", win,
+                     terminal_pos, nvim_pos, offsets, it->second.size());
     }
     co_return it->second;
 }
