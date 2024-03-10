@@ -70,8 +70,9 @@ public:
             co_return;
 
         spdlog::debug("Drawing buffer {} on window {}, images {}", id_, win_id, images_.size());
+        int offset = 0;
         for (auto& im : images_) {
-            co_await im.place(0, 0, win_id);
+            offset += co_await im.place(offset, win_id);
         }
     }
 

@@ -33,7 +33,7 @@ public:
         , line_{line} {}
 
     auto load() -> boost::cobalt::promise<void>;
-    auto place(int x, int y, int win_id) -> boost::cobalt::promise<void>;
+    auto place(int y_offset, int win_id) -> boost::cobalt::promise<int>;
     auto clear(int id = 0) -> void;
 };
 
@@ -61,21 +61,24 @@ auto Image<Backend>::load() -> boost::cobalt::promise<void> {
 }
 
 template <typename Backend>
-auto Image<Backend>::place(int x, int y, int win_id) -> boost::cobalt::promise<void> {
+auto Image<Backend>::place(int y_offset, int win_id) -> boost::cobalt::promise<int> {
     static const int ns_id = co_await graphics_.api().nvim_create_namespace("jupyter");
 
-    const auto area = image_.place(nvim::Point{.x = x, .y = static_cast<int>(y + line_ + 1)},
+    const auto area = image_.place(nvim::Point{.x = 0, .y = static_cast<int>(y_offset + line_ + 1)},
                                    co_await nvim::Window::get(graphics_, win_id));
     // fill area with virtual text
     using any = nvim::Api::any;
 
     std::vector<any> virt_lines(area.h, std::vector<any>{{std::vector<any>{{"", "Comment"}}}});
 
+    // TODO: use exact buffer number
     const auto mark_id =
         co_await graphics_.api().nvim_buf_set_extmark(0, ns_id, line_, 1, {{"virt_lines", std::move(virt_lines)}});
+    const auto mark = co_await graphics_.api().nvim_buf_get_extmark_by_id(0, ns_id, mark_id, {});
 
-    spdlog::info("Aligning image at {}:{}, line {} size {} with mark {}, window: {}", x, y, line_, area, mark_id,
-                 win_id);
+    spdlog::info("Aligning image at line {} size {} with mark {}, window: {}, mark: {} {}", line_, area, mark_id,
+                 win_id, mark.front(), mark.back());
+    co_return area.h;
 }
 
 template <typename Backend>
