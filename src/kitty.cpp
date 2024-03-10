@@ -1,5 +1,5 @@
 #include "kitty.hpp"
-#include "nvim_graphics.hpp"
+#include "graphics.hpp"
 #include "window.hpp"
 
 #include <boost/beast/core/detail/base64.hpp>

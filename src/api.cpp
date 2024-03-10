@@ -1,4 +1,4 @@
-#include "nvim.hpp"
+#include "api.hpp"
 #include "rpc.hpp"
 
 #include <fmt/format.h>

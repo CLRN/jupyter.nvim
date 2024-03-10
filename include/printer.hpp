@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nvim.hpp"
+#include "api.hpp"
 
 #include <boost/variant/variant.hpp>
 #include <fmt/core.h>

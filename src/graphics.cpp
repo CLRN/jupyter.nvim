@@ -1,6 +1,6 @@
-#include "nvim_graphics.hpp"
+#include "graphics.hpp"
 #include "geometry.hpp"
-#include "nvim.hpp"
+#include "api.hpp"
 #include "spdlog/spdlog.h"
 
 #include <fcntl.h>

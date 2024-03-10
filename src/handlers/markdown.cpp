@@ -1,8 +1,8 @@
 #include "executor.hpp"
 #include "handlers/images.hpp"
 #include "kitty.hpp"
-#include "nvim.hpp"
-#include "nvim_graphics.hpp"
+#include "api.hpp"
+#include "graphics.hpp"
 #include "printer.hpp"
 
 #include <boost/cobalt/promise.hpp>

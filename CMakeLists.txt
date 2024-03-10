@@ -49,9 +49,9 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
 # main library
 add_library(${CMAKE_PROJECT_NAME})
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE 
-  src/nvim.cpp
+  src/api.cpp
   src/kitty.cpp
-  src/nvim_graphics.cpp
+  src/graphics.cpp
 )
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}/include

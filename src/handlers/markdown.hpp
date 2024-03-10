@@ -1,5 +1,5 @@
-#include "nvim.hpp"
-#include "nvim_graphics.hpp"
+#include "api.hpp"
+#include "graphics.hpp"
 
 #include <boost/cobalt/promise.hpp>
 

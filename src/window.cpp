@@ -1,7 +1,7 @@
 #include "window.hpp"
 #include "geometry.hpp"
-#include "nvim.hpp"
-#include "nvim_graphics.hpp"
+#include "api.hpp"
+#include "graphics.hpp"
 
 #include <spdlog/spdlog.h>
 
