@@ -1,8 +1,10 @@
 #include "api.hpp"
+#include "printer.hpp"
 #include "rpc.hpp"
 
 #include <fmt/format.h>
 #include <range/v3/all.hpp>
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <memory>
@@ -180,11 +182,8 @@ auto Api::nvim_buf_get_commands(integer buffer, table<string, any> opts) -> prom
 }
 
 auto Api::nvim_buf_get_extmark_by_id(integer buffer, integer ns_id, integer id, table<string, any> opts)
-    -> promise<std::vector<integer>> {
-    auto response = co_await rpc_->call("nvim_buf_get_extmark_by_id", buffer, ns_id, id, opts);
-    co_return transform(response.as_vector(), [](auto t) -> integer {
-        return t.as_uint64_t();
-    });
+    -> promise<any> {
+    co_return co_await rpc_->call("nvim_buf_get_extmark_by_id", buffer, ns_id, id, opts);
 }
 
 auto Api::nvim_buf_get_extmarks(integer buffer, integer ns_id, any start, any end_, table<string, any> opts)

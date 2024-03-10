@@ -264,8 +264,7 @@ public:
     //               • hl_name: Whether to include highlight group name instead
     //                 of id, true if omitted
     // @return vim.api.keyset.get_extmark_item
-    auto nvim_buf_get_extmark_by_id(integer buffer, integer ns_id, integer id, table<string, any> opts)
-        -> promise<std::vector<integer>>;
+    auto nvim_buf_get_extmark_by_id(integer buffer, integer ns_id, integer id, table<string, any> opts) -> promise<any>;
 
     // Gets `extmarks` in "traversal order" from a `charwise` region defined by
     // buffer positions (inclusive, 0-indexed `api-indexing`).
