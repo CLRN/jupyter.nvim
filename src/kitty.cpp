@@ -117,7 +117,7 @@ Image::~Image() {
     }
 }
 
-auto Image::place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::promise<nvim::Size> {
+auto Image::placement(const nvim::Window& win) const -> nvim::Size {
     const auto img_size = nvim::Size{.w = image_.size[1], .h = image_.size[0]};
     const auto cell_size = nvim_.cell_size();
     const auto win_size = win.size();
@@ -125,13 +125,19 @@ auto Image::place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::
 
     const auto ratio = double(img_size.w) / img_size.h;
 
-    where.x += win.position().x;
-    where.y += win.position().y;
-
     const auto placement_size = (img_size.h > win_size_px.h || img_size.w > win_size_px.w)
                                     ? nvim::Size{.w = std::min(win_size.w, int(double(win_size.h) * ratio)),
                                                  .h = std::min(win_size.h, int(double(win_size.w) / ratio))}
                                     : nvim::Size{.w = img_size.w / cell_size.w, .h = img_size.h / cell_size.h};
+
+    return placement_size;
+}
+
+auto Image::place(nvim::Point where, const nvim::Window& win) const -> nvim::Size {
+    where.x += win.position().x;
+    where.y += win.position().y;
+
+    const auto placement_size = placement(win);
 
     spdlog::debug("[{}] Placing image with id {} to {} with size: {}", id_, win.id() * 10000 + id_, where,
                   placement_size);
@@ -140,7 +146,7 @@ auto Image::place(nvim::Point where, const nvim::Window& win) -> boost::cobalt::
     Command command{
         nvim_, 'a', 'p', 'i', id_, 'p', win.id() * 10000 + id_, 'q', 2, 'c', placement_size.w, 'r', placement_size.h};
 
-    co_return placement_size;
+    return placement_size;
 }
 
 auto Image::clear(int id) -> void {

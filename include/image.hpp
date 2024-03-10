@@ -64,8 +64,8 @@ template <typename Backend>
 auto Image<Backend>::place(int x, int y, int win_id) -> boost::cobalt::promise<void> {
     static const int ns_id = co_await graphics_.api().nvim_create_namespace("jupyter");
 
-    const auto area = co_await image_.place(nvim::Point{.x = x, .y = static_cast<int>(y + line_ + 1)},
-                                            co_await nvim::Window::get(graphics_, win_id));
+    const auto area = image_.place(nvim::Point{.x = x, .y = static_cast<int>(y + line_ + 1)},
+                                   co_await nvim::Window::get(graphics_, win_id));
     // fill area with virtual text
     using any = nvim::Api::any;
 

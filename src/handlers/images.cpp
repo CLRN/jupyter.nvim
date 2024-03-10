@@ -31,7 +31,7 @@ public:
             co_return;
 
         spdlog::debug("Drawing buffer {} on window {}", id_, win_id);
-        co_await image_.place(nvim::Point{}, co_await nvim::Window::get(graphics_, win_id));
+        image_.place(nvim::Point{}, co_await nvim::Window::get(graphics_, win_id));
     }
 
     auto clear(int win_id) {
