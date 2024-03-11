@@ -64,6 +64,19 @@ public:
         co_await boost::cobalt::join(promises);
     }
 
+    auto update(nvim::Api& api) -> boost::cobalt::promise<void> {
+        const auto win_id = co_await api.nvim_get_current_win();
+        if (!windows_.count(win_id))
+            co_return;
+
+        spdlog::debug("Updating buffer {} on window {}, images {}", id_, win_id, images_.size());
+
+        std::size_t offset = 0;
+        for (auto& im : images_) {
+            offset += co_await im.place(offset, id_, win_id);
+        }
+    }
+
     auto draw(nvim::Api& api) -> boost::cobalt::promise<void> {
         const auto win_id = co_await api.nvim_get_current_win();
         if (!windows_.insert(win_id).second)
@@ -81,7 +94,7 @@ public:
         spdlog::debug("Drawing buffer {} on window {}, images {}, marks: {}", id_, win_id, images_.size(),
                       nvim::Api::any{existing});
 
-        int offset = 0;
+        std::size_t offset = 0;
         for (auto& im : images_) {
             offset += co_await im.place(offset, id_, win_id);
         }
@@ -146,7 +159,7 @@ auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boo
     const auto handle_windows = [&]() -> boost::cobalt::promise<void> {
         auto gen = api.nvim_create_autocmd(
             {
-                "WinClosed", "WinEnter",
+                "WinClosed", "WinEnter", "CursorMoved", "InsertLeave"
                 // "WinResized",
                 // "WinScrolled",
             },
@@ -164,7 +177,9 @@ auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boo
             if (it == buffers.end())
                 continue;
 
-            if (event == "WinEnter") {
+            if (event == "CursorMoved" || event == "InsertLeave") {
+                co_await it->second.update(api);
+            } else if (event == "WinEnter") {
                 spdlog::debug("Entered window {}", msg);
                 co_await it->second.draw(api);
             } else if (event == "WinClosed") {

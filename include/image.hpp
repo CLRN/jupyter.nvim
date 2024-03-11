@@ -25,7 +25,7 @@ class Image {
     auto read_output(boost::process::async_pipe pipe) -> boost::cobalt::promise<std::vector<std::uint8_t>>;
 
 public:
-    Image(Graphics& graphics, std::string buffer_path, std::string path, size_t line)
+    Image(Graphics& graphics, std::string buffer_path, std::string path, size_t line) // initial image position
         : graphics_{graphics}
         , image_{graphics_}
         , path_{std::move(path)}
@@ -33,7 +33,7 @@ public:
         , line_{line} {}
 
     auto load() -> boost::cobalt::promise<void>;
-    auto place(int y_offset, int buf, int win_id) -> boost::cobalt::promise<int>;
+    auto place(std::size_t virt_offset, int buf, int win_id) -> boost::cobalt::promise<int>;
     auto clear(int id = 0) -> void;
 };
 
@@ -61,22 +61,50 @@ auto Image<Backend>::load() -> boost::cobalt::promise<void> {
 }
 
 template <typename Backend>
-auto Image<Backend>::place(int y_offset, int buf, int win_id) -> boost::cobalt::promise<int> {
+auto Image<Backend>::place(std::size_t virt_offset, int buf, int win_id) -> boost::cobalt::promise<int> {
     static const int ns_id = co_await graphics_.api().nvim_create_namespace("jupyter");
+
+    const auto window = co_await nvim::Window::get(graphics_, win_id);
+    const auto area = image_.placement(window);
 
     if (mark_id_) {
         const auto mark = co_await graphics_.api().nvim_buf_get_extmark_by_id(0, ns_id, mark_id_, {{"details", true}});
-        spdlog::info("existing mark: {}", mark);
+        const auto& val = mark.as_vector();
+        const auto line_num = val.at(0).as_uint64_t();
+        const auto& lines = val.at(2).as_multimap().find("virt_lines")->second.as_vector();
+
+        spdlog::info("Existing mark: {} at {} with {} lines", mark, line_num, lines.size());
+        if (area.h == lines.size() && line_ == line_num)
+            co_return area.h; // up to date
+
+        line_ = line_num; // mark has been moved, just use the mark's line
     }
 
-    const auto area = image_.place(nvim::Point{.x = 0, .y = static_cast<int>(y_offset + line_ + 1)},
-                                   co_await nvim::Window::get(graphics_, win_id));
+    image_.place(nvim::Point{.x = 0, .y = static_cast<int>(line_ + virt_offset + 1)}, window);
+
+    if (mark_id_) {
+        // we only need to update the image position, mark will move automatically
+        co_return area.h;
+    }
+
     // fill area with virtual text
     using any = nvim::Api::any;
     std::vector<any> virt_lines(area.h, std::vector<any>{{std::vector<any>{{"", "Comment"}}}});
 
-    mark_id_ =
-        co_await graphics_.api().nvim_buf_set_extmark(buf, ns_id, line_, 1, {{"virt_lines", std::move(virt_lines)}});
+    const auto id =
+        co_await graphics_.api().nvim_buf_set_extmark(buf, ns_id, line_, 0, {{"virt_lines", std::move(virt_lines)}});
+
+    if (mark_id_ && mark_id_ != id) {
+        // if mark id has changed clean up
+        co_await graphics_.api().nvim_buf_del_extmark(buf, ns_id, mark_id_);
+    }
+
+    mark_id_ = id;
+
+    // TODO:
+    // 1. editing should update image positions
+    // 2. scrolling past the image
+    // 3. working with other windows(preview in telescope)
 
     spdlog::info("Aligning image at line {} size {} with mark {}, window: {}", line_, area, mark_id_, win_id);
     co_return area.h;
