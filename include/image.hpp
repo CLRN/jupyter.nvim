@@ -65,27 +65,28 @@ auto Image<Backend>::place(std::size_t virt_offset, int buf, int win_id) -> boos
     static const int ns_id = co_await graphics_.api().nvim_create_namespace("jupyter");
 
     const auto window = co_await nvim::Window::get(graphics_, win_id);
-    const auto area = image_.placement(window);
+    const auto area = image_.area(window);
 
     if (mark_id_) {
         const auto mark = co_await graphics_.api().nvim_buf_get_extmark_by_id(0, ns_id, mark_id_, {{"details", true}});
         const auto& val = mark.as_vector();
-        const auto line_num = val.at(0).as_uint64_t();
-        const auto& lines = val.at(2).as_multimap().find("virt_lines")->second.as_vector();
+        if (!val.empty()) {
+            const auto line_num = val.at(0).as_uint64_t();
+            const auto& lines = val.at(2).as_multimap().find("virt_lines")->second.as_vector();
 
-        spdlog::info("Existing mark: {} at {} with {} lines", mark, line_num, lines.size());
-        if (area.h == lines.size() && line_ == line_num)
-            co_return area.h; // up to date
+            spdlog::info("Existing mark: {} at {} with {} lines", mark, line_num, lines.size());
+            if (area.h == lines.size() && line_ == line_num)
+                co_return area.h; // up to date
 
-        line_ = line_num; // mark has been moved, just use the mark's line
+            line_ = line_num; // mark has been moved, just use the mark's line
+            image_.place(nvim::Point{.x = 0, .y = static_cast<int>(line_ + virt_offset + 1)}, window);
+
+            // we only need to update the image position, mark will move automatically
+            co_return area.h;
+        }
     }
 
     image_.place(nvim::Point{.x = 0, .y = static_cast<int>(line_ + virt_offset + 1)}, window);
-
-    if (mark_id_) {
-        // we only need to update the image position, mark will move automatically
-        co_return area.h;
-    }
 
     // fill area with virtual text
     using any = nvim::Api::any;
@@ -102,7 +103,7 @@ auto Image<Backend>::place(std::size_t virt_offset, int buf, int win_id) -> boos
     mark_id_ = id;
 
     // TODO:
-    // 1. editing should update image positions
+    // 1. editing should update image positions - done
     // 2. scrolling past the image
     // 3. working with other windows(preview in telescope)
 

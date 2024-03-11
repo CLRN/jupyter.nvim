@@ -38,7 +38,7 @@ public:
 
     auto load(const std::string& path) -> void;
     auto load(const std::vector<std::uint8_t>& data) -> void;
-    auto placement(const nvim::Window& win) const -> nvim::Size;
+    auto area(const nvim::Window& win) const -> nvim::Size;
 
     // places the image to a window at col x and y, accepts optional placement(window) id
     auto place(nvim::Point where, const nvim::Window& win) const -> nvim::Size;

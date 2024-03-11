@@ -117,7 +117,7 @@ Image::~Image() {
     }
 }
 
-auto Image::placement(const nvim::Window& win) const -> nvim::Size {
+auto Image::area(const nvim::Window& win) const -> nvim::Size {
     const auto img_size = nvim::Size{.w = image_.size[1], .h = image_.size[0]};
     const auto cell_size = nvim_.cell_size();
     const auto win_size = win.size();
@@ -137,7 +137,7 @@ auto Image::place(nvim::Point where, const nvim::Window& win) const -> nvim::Siz
     where.x += win.position().x;
     where.y += win.position().y;
 
-    const auto placement_size = placement(win);
+    const auto placement_size = area(win);
 
     spdlog::debug("[{}] Placing image with id {} to {} with size: {}", id_, win.id() * 10000 + id_, where,
                   placement_size);

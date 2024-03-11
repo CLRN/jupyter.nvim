@@ -4,6 +4,7 @@
 #include "image.hpp"
 #include "kitty.hpp"
 #include "printer.hpp"
+#include "window.hpp"
 
 #include <boost/cobalt/promise.hpp>
 #include <spdlog/spdlog.h>
@@ -77,10 +78,12 @@ public:
         }
     }
 
-    auto draw(nvim::Api& api) -> boost::cobalt::promise<void> {
+    auto draw(nvim::Api& api) -> boost::cobalt::promise<int> {
         const auto win_id = co_await api.nvim_get_current_win();
         if (!windows_.insert(win_id).second)
-            co_return;
+            co_return win_id;
+
+        nvim::Window::invalidate(win_id);
 
         static const int ns_id = co_await api.nvim_create_namespace("jupyter");
 
@@ -98,6 +101,7 @@ public:
         for (auto& im : images_) {
             offset += co_await im.place(offset, id_, win_id);
         }
+        co_return win_id;
     }
 
     auto clear(int win_id) {
@@ -127,6 +131,7 @@ auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boo
                 {"group", augroup},
             });
 
+        int last_win = 0;
         while (gen) {
             auto msg = co_await gen;
             const auto data = msg.as_vector().front().as_multimap();
@@ -142,13 +147,12 @@ auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boo
                     it = buffers.emplace(id, std::move(b)).first;
                 }
 
-                co_await it->second.draw(api);
+                last_win = co_await it->second.draw(api);
             } else if (event == "BufLeave") {
                 const auto it = buffers.find(id);
                 if (it != buffers.end()) {
-                    const auto win = co_await api.nvim_get_current_win();
-                    spdlog::debug("Left buffer, window {}, data {}", win, msg);
-                    it->second.clear(win);
+                    spdlog::debug("Left buffer, window {}, data {}", last_win, msg);
+                    it->second.clear(last_win);
                 }
             } else {
                 buffers.erase(id);
