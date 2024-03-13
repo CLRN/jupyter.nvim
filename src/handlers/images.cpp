@@ -1,8 +1,8 @@
 #include "handlers/images.hpp"
-#include "geometry.hpp"
-#include "kitty.hpp"
 #include "api.hpp"
+#include "geometry.hpp"
 #include "graphics.hpp"
+#include "kitty.hpp"
 #include "printer.hpp"
 #include "window.hpp"
 
@@ -34,9 +34,9 @@ public:
         image_.place(nvim::Point{}, co_await nvim::Window::get(graphics_, win_id));
     }
 
-    auto clear(int win_id) {
+    auto clear(int win_id) -> boost::cobalt::promise<void> {
         if (windows_.erase(win_id)) {
-            image_.clear(win_id);
+            image_.clear(co_await nvim::Window::get(graphics_, win_id));
         }
     }
 };
@@ -87,7 +87,7 @@ auto handle_images(nvim::Api& api, nvim::Graphics& graphics, int augroup) -> boo
                 if (it != buffers.end()) {
                     const auto win = co_await api.nvim_get_current_win();
                     spdlog::debug("Left buffer, window {}, data {}", win, msg);
-                    it->second.clear(win);
+                    co_await it->second.clear(win);
                 }
             } else {
                 buffers.erase(id);

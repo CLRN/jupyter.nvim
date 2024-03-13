@@ -19,7 +19,7 @@ auto Graphics::api() -> Api& {
 }
 
 auto Graphics::init() -> boost::cobalt::promise<void> {
-    tty_ = co_await get_tty(api_);
+    tty_ = co_await get_tty();
     ofs_.open(tty_, std::ios::binary);
     co_await update();
 }
@@ -127,8 +127,8 @@ auto Graphics::cell_size() -> Size {
     return cell_size_;
 }
 
-auto Graphics::get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string> {
-    const auto output = co_await api.nvim_exec2("lua print(vim.fn['getpid']())", {{"output", true}});
+auto Graphics::get_tty() -> boost::cobalt::promise<std::string> {
+    const auto output = co_await api_.nvim_exec2("lua print(vim.fn['getpid']())", {{"output", true}});
 
     int pid = std::atoi(output.find("output")->second.as_string().c_str());
 
@@ -182,6 +182,13 @@ auto Graphics::position(int win_id) -> boost::cobalt::promise<Point> {
     }
 
     co_return {};
+}
+
+auto Graphics::visible_area() -> boost::cobalt::promise<std::pair<int, int>> {
+    const auto [first, last] =
+        co_await boost::cobalt::join(api_.nvim_exec2("lua print(vim.fn['line']('w0'))", {{"output", true}}),
+                                     api_.nvim_exec2("lua print(vim.fn['line']('w$'))", {{"output", true}}));
+    co_return {std::stoi(first.find("output")->second.as_string()), std::stoi(last.find("output")->second.as_string())};
 }
 
 } // namespace nvim

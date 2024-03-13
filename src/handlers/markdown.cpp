@@ -21,12 +21,15 @@ class Buffer {
     using Image = nvim::Image<kitty::Image>;
 
     const int id_{};
+    nvim::Graphics& graphics_;
     std::vector<Image> images_;
     std::set<int> windows_;
+    int last_first_line_{};
 
 public:
     Buffer(nvim::Graphics& graphics, int id, const std::string& path)
         : id_{id}
+        , graphics_{graphics}
         , images_{} {
 
         // read all images from the file
@@ -51,7 +54,7 @@ public:
                 const auto& [idx, line] = arg;
                 std::cmatch match;
                 std::regex_match(line.begin(), line.end(), match, link_regex);
-                return Image{graphics, path, match[1].str(), idx};
+                return Image{graphics, path, match[1].str(), static_cast<int>(idx)};
             }) | 
             ranges::to<std::vector<Image>>();
         // clang-format on
@@ -65,10 +68,12 @@ public:
         co_await boost::cobalt::join(promises);
     }
 
-    auto update(nvim::Api& api) -> boost::cobalt::promise<void> {
-        const auto win_id = co_await api.nvim_get_current_win();
+    auto update() -> boost::cobalt::promise<void> {
+        const auto win_id = co_await graphics_.api().nvim_get_current_win();
         if (!windows_.count(win_id))
             co_return;
+
+        co_await nvim::Window::update(graphics_, win_id);
 
         spdlog::debug("Updating buffer {} on window {}, images {}", id_, win_id, images_.size());
 
@@ -78,7 +83,8 @@ public:
         }
     }
 
-    auto draw(nvim::Api& api) -> boost::cobalt::promise<int> {
+    auto draw() -> boost::cobalt::promise<int> {
+        auto& api = graphics_.api();
         const auto win_id = co_await api.nvim_get_current_win();
         if (!windows_.insert(win_id).second)
             co_return win_id;
@@ -104,10 +110,10 @@ public:
         co_return win_id;
     }
 
-    auto clear(int win_id) {
+    auto clear(int win_id) -> boost::cobalt::promise<void> {
         if (windows_.erase(win_id)) {
             for (auto& im : images_) {
-                im.clear(win_id);
+                co_await im.clear(win_id);
             }
         }
     }
@@ -147,12 +153,12 @@ auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boo
                     it = buffers.emplace(id, std::move(b)).first;
                 }
 
-                last_win = co_await it->second.draw(api);
+                last_win = co_await it->second.draw();
             } else if (event == "BufLeave") {
                 const auto it = buffers.find(id);
                 if (it != buffers.end()) {
                     spdlog::debug("Left buffer, window {}, data {}", last_win, msg);
-                    it->second.clear(last_win);
+                    co_await it->second.clear(last_win);
                 }
             } else {
                 buffers.erase(id);
@@ -182,14 +188,14 @@ auto handle_markdown(nvim::Api& api, nvim::Graphics& remote, int augroup) -> boo
                 continue;
 
             if (event == "CursorMoved" || event == "InsertLeave") {
-                co_await it->second.update(api);
+                co_await it->second.update();
             } else if (event == "WinEnter") {
                 spdlog::debug("Entered window {}", msg);
-                co_await it->second.draw(api);
+                co_await it->second.draw();
             } else if (event == "WinClosed") {
                 const auto win = std::stoi(data.find("file")->second.as_string());
                 spdlog::debug("Closed window {}, data {}", win, msg);
-                it->second.clear(win);
+                co_await it->second.clear(win);
             }
         }
     };

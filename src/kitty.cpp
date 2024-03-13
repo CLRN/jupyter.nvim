@@ -149,12 +149,9 @@ auto Image::place(nvim::Point where, const nvim::Window& win) const -> nvim::Siz
     return placement_size;
 }
 
-auto Image::clear(int id) -> void {
+auto Image::clear(const nvim::Window& win) -> void {
     Command command{nvim_, 'a', 'd', 'd', 'i', 'i', id_, 'q', 2};
-    if (id) {
-        spdlog::debug("[{}] Clearing image with id {}", id_, id * 10000 + id_);
-        command.add('p', id * 10000 + id_);
-    }
+    spdlog::debug("[{}] Clearing image with id {}", id_, win.id() * 10000 + id_, 'p', win.id() * 10000 + id_);
 }
 
 } // namespace kitty

@@ -34,10 +34,13 @@ public:
     auto terminal_size() -> Size;
     auto cell_size() -> Size;
 
+    // returns first and last visible lines
+    auto visible_area() -> boost::cobalt::promise<std::pair<int, int>>;
+
     // returns row and col
     auto position(int win_id) -> boost::cobalt::promise<Point>;
 
-    auto get_tty(nvim::Api& api) -> boost::cobalt::promise<std::string>;
+    auto get_tty() -> boost::cobalt::promise<std::string>;
 
     auto stream() -> std::ostream&;
 };

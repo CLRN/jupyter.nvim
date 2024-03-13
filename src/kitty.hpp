@@ -42,6 +42,6 @@ public:
 
     // places the image to a window at col x and y, accepts optional placement(window) id
     auto place(nvim::Point where, const nvim::Window& win) const -> nvim::Size;
-    auto clear(int id = 0) -> void;
+    auto clear(const nvim::Window& win) -> void;
 };
 } // namespace kitty

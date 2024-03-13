@@ -6,8 +6,6 @@
 #include "printer.hpp"
 #include "window.hpp"
 
-#include <cstddef>
-
 #include <boost/cobalt/promise.hpp>
 #include <spdlog/spdlog.h>
 
@@ -20,21 +18,25 @@ class Image {
     int mark_id_{};
     const std::string path_;
     const std::string buffer_path_;
-    std::size_t line_{};
+    int buf_line_{};
+    int screen_line_{};
+    bool visible_{};
 
     auto read_output(boost::process::async_pipe pipe) -> boost::cobalt::promise<std::vector<std::uint8_t>>;
+    auto place_image(const nvim::Window& win) -> void;
+    auto update_line() -> boost::cobalt::promise<void>;
 
 public:
-    Image(Graphics& graphics, std::string buffer_path, std::string path, size_t line) // initial image position
+    Image(Graphics& graphics, std::string buffer_path, std::string path, int line) // initial image position
         : graphics_{graphics}
         , image_{graphics_}
         , path_{std::move(path)}
         , buffer_path_{std::move(buffer_path)}
-        , line_{line} {}
+        , buf_line_{line} {}
 
     auto load() -> boost::cobalt::promise<void>;
-    auto place(std::size_t virt_offset, int buf, int win_id) -> boost::cobalt::promise<int>;
-    auto clear(int id = 0) -> void;
+    auto place(int virt_offset, int buf, int win_id) -> boost::cobalt::promise<int>;
+    auto clear(int win_id) -> boost::cobalt::promise<void>;
 };
 
 template <typename Backend>
@@ -61,39 +63,53 @@ auto Image<Backend>::load() -> boost::cobalt::promise<void> {
 }
 
 template <typename Backend>
-auto Image<Backend>::place(std::size_t virt_offset, int buf, int win_id) -> boost::cobalt::promise<int> {
+auto Image<Backend>::place_image(const nvim::Window& win) -> void {
+
+    if (visible_) {
+        image_.place(nvim::Point{.x = 0, .y = static_cast<int>(screen_line_)}, win);
+    } else {
+        image_.clear(win);
+    }
+}
+
+template <typename Backend>
+auto Image<Backend>::update_line() -> boost::cobalt::promise<void> {
     static const int ns_id = co_await graphics_.api().nvim_create_namespace("jupyter");
-
-    const auto window = co_await nvim::Window::get(graphics_, win_id);
-    const auto area = image_.area(window);
-
     if (mark_id_) {
-        const auto mark = co_await graphics_.api().nvim_buf_get_extmark_by_id(0, ns_id, mark_id_, {{"details", true}});
+        const auto mark = co_await graphics_.api().nvim_buf_get_extmark_by_id(0, ns_id, mark_id_, {});
         const auto& val = mark.as_vector();
         if (!val.empty()) {
-            const auto line_num = val.at(0).as_uint64_t();
-            const auto& lines = val.at(2).as_multimap().find("virt_lines")->second.as_vector();
-
-            spdlog::info("Existing mark: {} at {} with {} lines", mark, line_num, lines.size());
-            if (area.h == lines.size() && line_ == line_num)
-                co_return area.h; // up to date
-
-            line_ = line_num; // mark has been moved, just use the mark's line
-            image_.place(nvim::Point{.x = 0, .y = static_cast<int>(line_ + virt_offset + 1)}, window);
-
-            // we only need to update the image position, mark will move automatically
-            co_return area.h;
+            buf_line_ = val.at(0).as_uint64_t();
         }
     }
+}
 
-    image_.place(nvim::Point{.x = 0, .y = static_cast<int>(line_ + virt_offset + 1)}, window);
+template <typename Backend>
+auto Image<Backend>::place(int virt_offset, int buf, int win_id) -> boost::cobalt::promise<int> {
+    static const int ns_id = co_await graphics_.api().nvim_create_namespace("jupyter");
+
+    const auto [window, _] = co_await boost::cobalt::join(nvim::Window::get(graphics_, win_id), update_line());
+    const auto [vis_from, vis_to] = window.visibility();
+    const auto area = image_.area(window);
+    const auto screen_line = buf_line_ + virt_offset + 1 - vis_from;
+    const auto is_visible = screen_line > 0 && screen_line + area.h <= window.size().h;
+    const auto redraw = (screen_line != screen_line_ && (visible_ || is_visible)) || visible_ != is_visible;
+
+    screen_line_ = screen_line;
+    visible_ = is_visible;
+
+    if (!redraw) {
+        co_return visible_ ? area.h : 0;
+    }
+
+    place_image(window);
 
     // fill area with virtual text
     using any = nvim::Api::any;
     std::vector<any> virt_lines(area.h, std::vector<any>{{std::vector<any>{{"", "Comment"}}}});
 
-    const auto id =
-        co_await graphics_.api().nvim_buf_set_extmark(buf, ns_id, line_, 0, {{"virt_lines", std::move(virt_lines)}});
+    const auto id = co_await graphics_.api().nvim_buf_set_extmark(buf, ns_id, buf_line_, 0,
+                                                                  {{"virt_lines", std::move(virt_lines)}});
 
     if (mark_id_ && mark_id_ != id) {
         // if mark id has changed clean up
@@ -107,13 +123,14 @@ auto Image<Backend>::place(std::size_t virt_offset, int buf, int win_id) -> boos
     // 2. scrolling past the image
     // 3. working with other windows(preview in telescope)
 
-    spdlog::info("Aligning image at line {} size {} with mark {}, window: {}", line_, area, mark_id_, win_id);
-    co_return area.h;
+    spdlog::info("Aligning image at line {} size {} with mark {}, window: {}", buf_line_, area, mark_id_, win_id);
+    co_return visible_ ? area.h : 0;
 }
 
 template <typename Backend>
-auto Image<Backend>::clear(int id) -> void {
-    image_.clear(id);
+auto Image<Backend>::clear(int win_id) -> boost::cobalt::promise<void> {
+    const auto win = co_await nvim::Window::get(graphics_, win_id);
+    image_.clear(win);
 }
 
 template <typename Backend>
