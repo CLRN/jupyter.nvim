@@ -57,10 +57,12 @@ auto Window::update(Graphics& api, int win) -> boost::cobalt::promise<void> {
     }
 }
 
-auto Window::update(Graphics& api) -> boost::cobalt::promise<void> {
+auto Window::update(Graphics& api) -> boost::cobalt::promise<bool> {
     const auto out = co_await api.api().nvim_exec2("lua print(vim.fn['line']('w0'))", {{"output", true}});
+    const auto prev = visible_.first;
     visible_.first = std::stoi(out.find("output")->second.as_string()) - 1;
     visible_.second = visible_.first + size_.h;
+    co_return prev == visible_.first;
 }
 
 auto Window::position() const -> Point {

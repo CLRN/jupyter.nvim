@@ -20,7 +20,7 @@ class Window {
 
     Window(int id, Point pos, Size offsets, Size size, std::pair<int, int> visible);
 
-    auto update(Graphics& api) -> boost::cobalt::promise<void>;
+    auto update(Graphics& api) -> boost::cobalt::promise<bool>;
 
 public:
     static auto get(Graphics& api, int win) -> boost::cobalt::promise<Window>;

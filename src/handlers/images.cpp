@@ -122,7 +122,7 @@ auto handle_images(nvim::Api& api, nvim::Graphics& graphics, int augroup) -> boo
             } else if (event == "WinClosed") {
                 const auto win = std::stoi(data.find("file")->second.as_string());
                 spdlog::debug("Closed window {}, data {}", win, msg);
-                it->second.clear(win);
+                co_await it->second.clear(win);
             }
         }
     };

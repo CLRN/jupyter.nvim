@@ -92,7 +92,7 @@ auto Image<Backend>::place(int virt_offset, int buf, int win_id) -> boost::cobal
     const auto [vis_from, vis_to] = window.visibility();
     const auto area = image_.area(window);
     const auto screen_line = buf_line_ + virt_offset + 1 - vis_from;
-    const auto is_visible = screen_line > 0 && screen_line + area.h <= window.size().h;
+    const auto is_visible = screen_line - 1 >= 0 && screen_line - 1 + area.h <= window.size().h;
     const auto redraw = (screen_line != screen_line_ && (visible_ || is_visible)) || visible_ != is_visible;
 
     screen_line_ = screen_line;
@@ -104,26 +104,26 @@ auto Image<Backend>::place(int virt_offset, int buf, int win_id) -> boost::cobal
 
     place_image(window);
 
-    // fill area with virtual text
-    using any = nvim::Api::any;
-    std::vector<any> virt_lines(area.h, std::vector<any>{{std::vector<any>{{"", "Comment"}}}});
+    if (!mark_id_) {
+        // fill area with virtual text
+        using any = nvim::Api::any;
+        std::vector<any> virt_lines(area.h, std::vector<any>{{std::vector<any>{{"", "Comment"}}}});
 
-    const auto id = co_await graphics_.api().nvim_buf_set_extmark(buf, ns_id, buf_line_, 0,
-                                                                  {{"virt_lines", std::move(virt_lines)}});
+        mark_id_ = co_await graphics_.api().nvim_buf_set_extmark(buf, ns_id, buf_line_, 0,
+                                                                 {{"virt_lines", std::move(virt_lines)}});
 
-    if (mark_id_ && mark_id_ != id) {
-        // if mark id has changed clean up
+        spdlog::info("Aligning image at line {} size {} with mark {}, window: {}", buf_line_, area, mark_id_, win_id);
+    } else if (mark_id_ && !visible_) {
+        spdlog::info("Hiding image at line {} size {} with mark {}, window: {}", buf_line_, area, mark_id_, win_id);
         co_await graphics_.api().nvim_buf_del_extmark(buf, ns_id, mark_id_);
+        mark_id_ = 0;
     }
-
-    mark_id_ = id;
 
     // TODO:
     // 1. editing should update image positions - done
-    // 2. scrolling past the image
+    // 2. scrolling past the image - done
     // 3. working with other windows(preview in telescope)
 
-    spdlog::info("Aligning image at line {} size {} with mark {}, window: {}", buf_line_, area, mark_id_, win_id);
     co_return visible_ ? area.h : 0;
 }
 
