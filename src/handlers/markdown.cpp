@@ -61,10 +61,24 @@ public:
     }
 
     auto load() -> boost::cobalt::promise<void> {
-        std::vector<boost::cobalt::promise<void>> promises;
-        for (auto& im : images_) {
-            promises.push_back(im.load());
+        auto& api = graphics_.api();
+
+        static const int ns_id = co_await api.nvim_create_namespace("jupyter");
+
+        {
+            std::vector<boost::cobalt::promise<void>> promises;
+            for (auto& im : images_) {
+                promises.push_back(im.load());
+            }
+            co_await boost::cobalt::join(promises);
         }
+
+        const auto existing = co_await api.nvim_buf_get_extmarks(id_, ns_id, 0, -1, {});
+        std::vector<boost::cobalt::promise<bool>> promises;
+        for (const auto mark : existing) {
+            promises.push_back(api.nvim_buf_del_extmark(id_, ns_id, mark.as_vector().front().as_uint64_t()));
+        }
+
         co_await boost::cobalt::join(promises);
     }
 
@@ -73,9 +87,9 @@ public:
         if (!windows_.count(win_id))
             co_return;
 
-        co_await nvim::Window::update(graphics_, win_id);
-
         spdlog::debug("Updating buffer {} on window {}, images {}", id_, win_id, images_.size());
+
+        co_await nvim::Window::update(graphics_, win_id);
 
         std::size_t offset = 0;
         for (auto& im : images_) {
@@ -91,17 +105,7 @@ public:
 
         nvim::Window::invalidate(win_id);
 
-        static const int ns_id = co_await api.nvim_create_namespace("jupyter");
-
-        const auto existing = co_await api.nvim_buf_get_extmarks(id_, ns_id, 0, -1, {});
-        std::vector<boost::cobalt::promise<bool>> promises;
-        for (const auto mark : existing) {
-            promises.push_back(api.nvim_buf_del_extmark(id_, ns_id, mark.as_vector().front().as_uint64_t()));
-        }
-        co_await boost::cobalt::join(promises);
-
-        spdlog::debug("Drawing buffer {} on window {}, images {}, marks: {}", id_, win_id, images_.size(),
-                      nvim::Api::any{existing});
+        spdlog::debug("Drawing buffer {} on window {}, images {}", id_, win_id, images_.size());
 
         std::size_t offset = 0;
         for (auto& im : images_) {

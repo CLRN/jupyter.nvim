@@ -19,8 +19,8 @@ class Image {
     const std::string path_;
     const std::string buffer_path_;
     int buf_line_{};
-    int screen_line_{};
-    bool visible_{};
+    std::map<int, int> screen_line_{};
+    std::map<int, bool> visible_{};
 
     auto read_output(boost::process::async_pipe pipe) -> boost::cobalt::promise<std::vector<std::uint8_t>>;
     auto place_image(const nvim::Window& win) -> void;
@@ -65,8 +65,8 @@ auto Image<Backend>::load() -> boost::cobalt::promise<void> {
 template <typename Backend>
 auto Image<Backend>::place_image(const nvim::Window& win) -> void {
 
-    if (visible_) {
-        image_.place(nvim::Point{.x = 0, .y = static_cast<int>(screen_line_)}, win);
+    if (visible_[win.id()]) {
+        image_.place(nvim::Point{.x = 0, .y = static_cast<int>(screen_line_[win.id()])}, win);
     } else {
         image_.clear(win);
     }
@@ -93,13 +93,14 @@ auto Image<Backend>::place(int virt_offset, int buf, int win_id) -> boost::cobal
     const auto area = image_.area(window);
     const auto screen_line = buf_line_ + virt_offset + 1 - vis_from;
     const auto is_visible = screen_line - 1 >= 0 && screen_line - 1 + area.h <= window.size().h;
-    const auto redraw = (screen_line != screen_line_ && (visible_ || is_visible)) || visible_ != is_visible;
+    const auto redraw =
+        (screen_line != screen_line_[win_id] && (visible_[win_id] || is_visible)) || visible_[win_id] != is_visible;
 
-    screen_line_ = screen_line;
-    visible_ = is_visible;
+    screen_line_[win_id] = screen_line;
+    visible_[win_id] = is_visible;
 
     if (!redraw) {
-        co_return visible_ ? area.h : 0;
+        co_return visible_[win_id] ? area.h : 0;
     }
 
     place_image(window);
@@ -113,7 +114,7 @@ auto Image<Backend>::place(int virt_offset, int buf, int win_id) -> boost::cobal
                                                                  {{"virt_lines", std::move(virt_lines)}});
 
         spdlog::info("Aligning image at line {} size {} with mark {}, window: {}", buf_line_, area, mark_id_, win_id);
-    } else if (mark_id_ && !visible_) {
+    } else if (mark_id_ && !visible_[win_id]) {
         spdlog::info("Hiding image at line {} size {} with mark {}, window: {}", buf_line_, area, mark_id_, win_id);
         co_await graphics_.api().nvim_buf_del_extmark(buf, ns_id, mark_id_);
         mark_id_ = 0;
@@ -122,9 +123,9 @@ auto Image<Backend>::place(int virt_offset, int buf, int win_id) -> boost::cobal
     // TODO:
     // 1. editing should update image positions - done
     // 2. scrolling past the image - done
-    // 3. working with other windows(preview in telescope)
-
-    co_return visible_ ? area.h : 0;
+    // 3. multiple window support
+    // 4. working with other windows(preview in telescope)
+    co_return visible_[win_id] ? area.h : 0;
 }
 
 template <typename Backend>
