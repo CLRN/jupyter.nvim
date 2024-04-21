@@ -37,7 +37,7 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
 )
 
-set(BOOST_INCLUDE_LIBRARIES asio cobalt filesystem)
+set(BOOST_INCLUDE_LIBRARIES asio cobalt filesystem process variant beast)
 set(MSGPACK_CXX20 ON CACHE INTERNAL "")
 set(MSGPACK_USE_X3_PARSE ON CACHE INTERNAL "")
 set(MSGPACK_USE_STD_VARIANT_ADAPTOR ON CACHE INTERNAL "")
@@ -61,8 +61,11 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC
   msgpack-cxx 
   nlohmann_json::nlohmann_json
   Boost::asio 
+  Boost::beast 
   Boost::cobalt
   Boost::filesystem
+  Boost::process
+  Boost::variant
   fmt::fmt
   spdlog
   range-v3

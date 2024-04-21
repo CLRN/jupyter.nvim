@@ -25,7 +25,7 @@ public:
     }
     template <typename Context>
     constexpr auto format(const nvim::Point& p, Context& ctx) const {
-        return format_to(ctx.out(), "({}:{})", p.x, p.y);
+        return fmt::format_to(ctx.out(), "({}:{})", p.x, p.y);
     }
 };
 
@@ -37,6 +37,6 @@ public:
     }
     template <typename Context>
     constexpr auto format(const nvim::Size& s, Context& ctx) const {
-        return format_to(ctx.out(), "({}x{})", s.w, s.h);
+        return fmt::format_to(ctx.out(), "({}x{})", s.w, s.h);
     }
 };
