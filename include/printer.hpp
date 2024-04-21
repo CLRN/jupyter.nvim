@@ -14,7 +14,7 @@ struct VariantFormatter : boost::static_visitor<void> {
     VariantFormatter(fmt::format_context& ctx)
         : ctx_{ctx} {}
 
-    void operator()(const msgpack::type::nil_t& v) const {
+    void operator()(const msgpack::type::nil_t&) const {
         fmt::format_to(ctx_.out(), "nil");
     }
 

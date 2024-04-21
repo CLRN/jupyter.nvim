@@ -65,6 +65,7 @@ public:
         pk.pack_array(sizeof...(u));
         if constexpr (sizeof...(u)) {
             int _[] = {(pk.pack(u), 0)...};
+            (void)_;
         }
 
         co_await socket_->async_send(boost::asio::buffer(buffer.data(), buffer.size()), boost::cobalt::use_op);

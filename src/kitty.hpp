@@ -16,8 +16,6 @@ namespace kitty {
 
 class Cursor {
     nvim::Graphics& nvim_;
-    const int x_{};
-    const int y_{};
 
 public:
     Cursor(nvim::Graphics& nvim, int x, int y);

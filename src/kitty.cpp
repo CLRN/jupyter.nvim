@@ -47,9 +47,7 @@ Cursor::~Cursor() {
 }
 
 Cursor::Cursor(nvim::Graphics& nvim, int x, int y)
-    : nvim_{nvim}
-    , x_{x}
-    , y_{y} {
+    : nvim_{nvim} {
     nvim_.stream() << "\0337";                         // save pos
     nvim_.stream() << "\033[" << y << ";" << x << "f"; // move
 }
